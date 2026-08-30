@@ -21,6 +21,7 @@ httpx[http2]==0.28.1
 ntgcalls
 py-tgcalls==2.0.6
 deep-translator
+gpytranslate
 gtts
 pytimeparse
 regex
