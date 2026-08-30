@@ -1,0 +1,355 @@
+import asyncio
+import io
+import os
+import random
+import traceback
+from uuid import uuid4
+
+import aiofiles
+from google import genai
+from google.genai import types
+from bs4 import BeautifulSoup
+from geopy.geocoders import Nominatim
+from pyrogram.errors import MessageTooLong
+
+from clients import bot
+from config import API_GEMINI, API_MAELYN
+from database import state
+from helpers import Bing, ButtonUtils, Emoji, Tools, animate_proses
+
+MAX_MEDIA_PER_BATCH = 7
+
+
+MAX_CAPTION_LENGTH = 700
+
+RANDOM_THEME = [
+    "Percintaan",
+    "Bijak",
+    "Masa Depan",
+    "Motivasi",
+    "Jenaka",
+    "Nasihat",
+    "Agama",
+    "Random",
+]
+CONTENT_RULES = {
+    "pantun": "1 pantun gaul 4 baris: 2 sampiran, 2 isi.",
+    "tebakan": "1 tebakan gaul: tanya + jawab.",
+    "lelucon": "1 lelucon gaul singkat.",
+    "quotes": "1 quotes gaul singkat bermakna.",
+    "puisi": "1 puisi gaul sesuai tema.",
+}
+
+
+genai_client = genai.Client(
+    api_key=API_GEMINI
+)
+
+DEFAULT_CERPEN_IMAGE = "https://files.catbox.moe/hnjkpt.jpg"
+
+CERITA_TYPES = {
+    "cerpenremaja": "remaja",
+    "cerpenanak": "anak",
+    "cerpenmisteri": "misteri",
+    "cerpenbudaya": "budaya",
+    "cerpenromantis": "romantis",
+    "cerpengalau": "galau",
+    "cerpengokil": "gokil",
+    "cerpeninspiratif": "inspiratif",
+    "cerpenkehidupan": "kehidupan",
+    "cerpensastra": "sastra",
+    "cerpenjepang": "jepang",
+    "cerpenkorea": "korea",
+    "cerpenkeluarga": "keluarga",
+    "cerpenpersahabatan": "persahabatan",
+    "cerpenkristen": "kristen",
+    "cerpenramadhan": "ramadhan",
+    "cerpenliburan": "liburan",
+    "cerpenlingkungan": "lingkungan",
+    "cerpenmengharukan": "mengharukan",
+}
+
+
+def split_message(text, length=824):
+    return [text[i : i + length] for i in range(0, len(text), length)]
+
+
+async def alkitab_cmd(client, message):
+    em = Emoji(client)
+    await em.get()
+
+    proses = await animate_proses(message, em.proses)
+    prompt = client.get_text(message)
+    if not prompt:
+        return await proses.edit(f"{em.gagal}**Please give me a word.**")
+
+    url = f"https://alkitab.me/search?q={prompt}"
+    response = await Tools.fetch.get(url)
+    if response.status_code != 200:
+        return await proses.edit(f"{em.gagal}**Please try again later!!**")
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    result = []
+
+    try:
+        for div in soup.find_all("div", class_="vw"):
+            a_tag = div.find("a")
+            p_tag = div.find("p")
+
+            if not a_tag or not p_tag:
+                continue
+
+            link = a_tag.get("href", "#")
+            title = a_tag.get_text(strip=True)
+            teks = p_tag.get_text(strip=True)
+
+            result.append({"teks": teks, "link": link, "title": title})
+
+        if not result:
+            return await proses.edit(
+                f"{em.gagal}**Tidak ditemukan hasil untuk kata:** `{prompt}`"
+            )
+
+        msg = "\n\n────────\n\n".join(
+            f"{v['title']} - https://alkitab.me{v['link']}\n{v['teks']}" for v in result
+        )
+
+        if len(msg) < 4000:
+            return await proses.edit(
+                f"{em.sukses}<b>Hasil pencarian:</b>\n\n{msg}",
+                disable_web_page_preview=True,
+            )
+
+        output = io.BytesIO(msg.encode("utf-8"))
+        output.name = f"alkitab_{prompt}.txt"
+        await client.send_document(
+            message.chat.id,
+            output,
+            caption=f"{em.sukses} <b>Hasil pencarian kata:</b> <code>{prompt}</code>",
+        )
+        return await proses.delete()
+
+    except Exception as e:
+        return await proses.edit(f"{em.gagal}**Terjadi error:** `{e}`")
+
+
+def gen_content(command, theme):
+    rule = CONTENT_RULES.get(command.lower().strip())
+    if not rule:
+        return None
+
+    prompt = f"{rule} Tema: {theme}. Savage, sarkas, nyentil, natural, bahasa tongkrongan. Hanya hasil."
+
+    try:
+        response = genai_client.models.generate_content(
+            model="gemini-3.1-flash-lite",
+            contents=prompt,
+            config=types.GenerateContentConfig(temperature=1.0),
+        )
+        return getattr(response, "text", None)
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
+async def pantun_cmd(client, message):
+    emo = Emoji(client)
+    await emo.get()
+
+    cmd = message.command[0].lower()
+    input_ = client.get_text(message).strip()
+
+    if not input_:
+        input_ = random.choice(RANDOM_THEME)
+
+    pros = await message.reply(
+        f"{emo.proses}"
+        f"<b>Processing to create "
+        f"{cmd} {input_} ..</b>"
+    )
+
+    text = gen_content(cmd, input_)
+
+    if not text:
+        return await pros.edit(
+            f"{emo.gagal}"
+            f"<b>Failed to create "
+            f"{cmd} {input_}.</b>"
+        )
+
+    return await pros.edit(
+        f"<blockquote>"
+        f"{emo.sukses}"
+        f"<b>Successfully generated "
+        f"{cmd} {input_}:</b>\n\n"
+        f"{text}\n\n"
+        f"<b>{emo.profil} Generated by: "
+        f"{client.me.mention}</b>"
+        f"</blockquote>"
+    )
+
+
+async def chord_cmd(client, message):
+    em = Emoji(client)
+    await em.get()
+    proses = await animate_proses(message, em.proses)
+    prompt = client.get_text(message)
+    if not prompt:
+        return await proses.edit(
+            f"{em.gagal}**Please give me prompt!\nExample: `{message.text.split()[0]} Dear God`.**"
+        )
+    arg = client.get_text(message)
+    payload = {"search": arg}
+    url = "https://api.siputzx.my.id/api/s/gitagram"
+    respon = await Tools.fetch.post(url, json=payload)
+    if respon.status_code != 200:
+        return await proses.edit(f"**Please try again later: {respon.status_code}.**")
+    data = respon.json()["data"]
+    uniq = f"{str(uuid4())}"
+    state.set(uniq.split("-")[0], "chord", data)
+    inline = await ButtonUtils.send_inline_bot_result(
+        message,
+        message.chat.id,
+        bot.me.username,
+        f"inline_chord {uniq.split('-')[0]}",
+    )
+    if inline:
+        return await proses.delete()
+    else:
+        return await proses.edit(
+            f"{em.gagal}**Please try again later: {respon.status_code}!!**"
+        )
+
+async def pastebin_cmd(client, message):
+    em = Emoji(client)
+    await em.get()
+
+    proses = await animate_proses(message, em.proses)
+    if not message.reply_to_message:
+        return await proses.edit(f"{em.gagal}**Please reply to message!!**")
+    r = message.reply_to_message
+    if not r.text and not r.document:
+        return await proses.edit(
+            f"{em.gagal}**Please reply to message text or document!!**"
+        )
+    if r.text:
+        content = str(r.text)
+    else:
+        if r.document.file_size > 40000:
+            return await proses.edit(f"{em.gagal}**Maximum size is 40000!!**")
+        doc = await message.reply_to_message.download()
+        async with aiofiles.open(doc, mode="r") as f:
+            content = await f.read()
+        os.remove(doc)
+    link = await Tools.paste(content)
+    photo = await Tools.screen_web(link, True)
+    try:
+        await message.reply_document(
+            photo, caption=f"{em.sukses}<b>Succesed <a href='{link}'>link</a></b>"
+        )
+        return await proses.delete()
+    except Exception:
+        await message.reply(f"{em.sukses}<b>Succesed <a href='{link}'>link</a></b>")
+        return await proses.delete()
+
+
+async def infoanime_cmd(client, message):
+    em = Emoji(client)
+    await em.get()
+    proses = await animate_proses(message, em.proses)
+    url = "https://api.siputzx.my.id/api/anime/samehadaku/latest"
+    response = await Tools.fetch.post(url)
+    if response.status_code != 200:
+        return await proses.edit(
+            f"{em.gagal}**Please try again later: {response.status_code}!!**"
+        )
+    data = response.json()["data"]
+    uniq = f"{str(uuid4())}"
+    state.set(uniq.split("-")[0], "anime", data)
+    inline = await ButtonUtils.send_inline_bot_result(
+        message,
+        message.chat.id,
+        bot.me.username,
+        f"inline_anime {uniq.split('-')[0]}",
+    )
+    if inline:
+        return await proses.delete()
+    else:
+        return await proses.edit(
+            f"{em.gagal}**Please try again later: {response.status_code}!!**"
+        )
+
+
+async def tafsir_cmd(client, message):
+    em = Emoji(client)
+    await em.get()
+    proses = await animate_proses(message, em.proses)
+
+    prompt = client.get_text(message)
+    if not prompt:
+        return await proses.edit(
+            f"{em.gagal} <b>Enter the dream text to interpret.</b>"
+        )
+
+    url = f"https://api.siputzx.my.id/api/primbon/tafsirmimpi?mimpi={prompt}"
+    response = await Tools.fetch.get(url)
+    if response.status_code != 200:
+        return await proses.edit(
+            f"{em.gagal} <b>Server is having problems, please try again later.</b>"
+        )
+
+    data = response.json().get("data")
+    if not data:
+        return await proses.edit(f"{em.gagal} <b>Data not found.</b>")
+
+    keyword = data.get("keyword", "Tidak diketahui")
+    hasil_list = data.get("hasil", [])
+    total = data.get("total", "0")
+    solusi = data.get("solusi", "")
+
+    hasil_teks = ""
+    if hasil_list:
+        hasil_teks = "\n".join(f"• {item}" for item in hasil_list)
+    else:
+        hasil_teks = "<i>(There is no direct interpretation for this dream.)</i>"
+
+    solusi_teks = solusi.strip().replace("      ", "").replace("\n", "\n")
+
+    teks = (
+        f"<b>🌙 Tafsir Mimpi</b>\n\n"
+        f"<b>🔑 Keyword:</b> {keyword}\n"
+        f"<b>📊 Total Ditemukan:</b> {total}\n\n"
+        f"<b>📖 Hasil Tafsir:</b>\n{hasil_teks}\n\n"
+        f"<b>💡 Solusi:</b>\n<blockquote expandable>{solusi_teks}</blockquote>"
+    )
+
+    return await proses.edit(teks)
+
+
+async def maps_cmd(client, message):
+    em = Emoji(client)
+    await em.get()
+    proses = await animate_proses(message, em.proses)
+    prompt = client.get_text(message)
+    if not prompt:
+        return await proses.edit(
+            f"{em.gagal} <b>Please specify location!!\nExample: `{message.text.split()[0]} Ceger, Pondok Aren Tangerang Selatan</b>"
+        )
+    try:
+        geolocator = Nominatim(user_agent="User")
+        geoloc = geolocator.geocode(prompt)
+        if geoloc:
+            lon = geoloc.longitude
+            lat = geoloc.latitude
+            share = await message.reply_location(latitude=lat, longitude=lon)
+            await message.reply(
+                f"{em.sukses}**Location for: `{prompt}`.**",
+                reply_to_message_id=share.id,
+            )
+        else:
+            await message.reply(
+                f"{em.gagal}**Addres not found!! Please input a valid address.**"
+            )
+    except Exception as er:
+        await message.reply(f"{em.gagal}**ERROR:** {str(er)}")
+    return await proses.delete()
