@@ -20,7 +20,7 @@ gitpython
 httpx[http2]==0.28.1
 ntgcalls
 py-tgcalls==2.0.6
-gpytranslate
+deep-translator
 gtts
 pytimeparse
 regex
