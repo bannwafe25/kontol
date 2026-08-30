@@ -14,7 +14,7 @@ import gtts
 import requests
 import speech_recognition as sr
 from bs4 import BeautifulSoup
-from gpytranslate import Translator
+from deep_translator import GoogleTranslator
 from PIL import Image
 from pyrogram import raw, types
 from pyrogram.enums import MessageMediaType
@@ -757,31 +757,70 @@ async def tiny_cmd(client, message):
     os.remove(doc)
     return
 
-
 async def tr_cmd(client, message):
     em = Emoji(client)
     await em.get()
-    trans = Translator()
 
     pros = await animate_proses(message, em.proses)
-    bhs = await client.get_translate()
-    if message.reply_to_message:
 
-        txt = message.reply_to_message.text or message.reply_to_message.caption
-        src = await trans.detect(txt)
-    else:
-        if len(message.command) < 2:
-            return await message.reply(
-                f"{em.gagal}**Please reply to message text or give text!**"
+    try:
+        # Bahasa target dari konfigurasi bot
+        bhs = await client.get_translate()
+
+        if message.reply_to_message:
+            txt = (
+                message.reply_to_message.text
+                or message.reply_to_message.caption
             )
         else:
+            if len(message.command) < 2:
+                return await message.reply(
+                    f"{em.gagal}**Please reply to message text or give text!**"
+                )
+
             txt = message.text.split(None, 1)[1]
-            src = await trans.detect(txt)
-    trsl = await trans(txt, sourcelang=src, targetlang=bhs)
-    reply = f"{em.sukses} Translated:\n\n{trsl.text}"
-    rep = message.reply_to_message or message
-    await pros.delete()
-    return await client.send_message(message.chat.id, reply, reply_to_message_id=rep.id)
+
+        if not txt or not txt.strip():
+            return await message.reply(
+                f"{em.gagal}**No text found to translate!**"
+            )
+
+        # GoogleTranslator mendukung source="auto"
+        # sehingga bahasa sumber tidak perlu dideteksi manual.
+        translator = GoogleTranslator(
+            source="auto",
+            target=bhs
+        )
+
+        # deep-translator bersifat synchronous.
+        # Jalankan dalam thread agar event loop Pyrogram tidak terblokir.
+        translated = await asyncio.to_thread(
+            translator.translate,
+            txt
+        )
+
+        reply = f"{em.sukses} Translated:\n\n{translated}"
+
+        rep = message.reply_to_message or message
+
+        return await client.send_message(
+            message.chat.id,
+            reply,
+            reply_to_message_id=rep.id
+        )
+
+    except Exception as e:
+        print(f"[TRANSLATE ERROR] {type(e).__name__}: {e}")
+
+        return await message.reply(
+            f"{em.gagal}**Translation failed. Please try again later.**"
+        )
+
+    finally:
+        try:
+            await pros.delete()
+        except Exception:
+            pass
 
 
 async def lang_cmd(client, message):
