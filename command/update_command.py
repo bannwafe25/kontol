@@ -129,7 +129,7 @@ async def plugins_cmd(_, message):
 
 async def send_ubot_1(client, message):
     user = message.from_user if message.from_user else message.sender_chat
-    if user.id not in config.KYNAN:
+    if user.id != config.OWNER_ID:
         return
     return await client.send_message(
         message.from_user.id,
@@ -151,7 +151,7 @@ async def send_ubot_2(client, message):
 
 async def restore(client, message):
     user = message.from_user if message.from_user else message.sender_chat
-    if user.id not in config.KYNAN:
+    if user.id != config.OWNER_ID:
         return
     reply = message.reply_to_message
     if not reply:
@@ -190,7 +190,7 @@ async def restore(client, message):
 
 async def backup(client, message):
     user = message.from_user if message.from_user else message.sender_chat
-    if user.id not in config.KYNAN:
+    if user.id != config.OWNER_ID:
         return
     now = datetime.now(timezone("Asia/Jakarta"))
     timestamp = now.strftime("%Y-%m-%d_%H:%M")
@@ -208,7 +208,7 @@ async def backup(client, message):
 
 async def cb_shell(client, message):
     user = message.from_user if message.from_user else message.sender_chat
-    if user.id not in config.KYNAN:
+    if user.id != config.OWNER_ID:
         return
     if len(message.command) < 2:
         return await message.reply("Noob!!")
@@ -250,7 +250,7 @@ async def cb_shell(client, message):
 
 async def cb_evaluasi_bot(client, message):
     user = message.from_user if message.from_user else message.sender_chat
-    if user.id not in config.KYNAN:
+    if user.id != config.OWNER_ID:
         return
     if len(message.text.split()) == 1:
         await message.reply_text("<b>No Code!</b>", quote=True)
@@ -351,7 +351,7 @@ async def cb_evaluasi_bot(client, message):
 
 async def cb_evalusi(client, message):
     user = message.from_user if message.from_user else message.sender_chat
-    if user.id not in config.KYNAN:
+    if user.id != config.OWNER_ID:
         return
     if len(message.text.split()) == 1:
         await message.reply_text("<b>No Code!</b>", quote=True)
