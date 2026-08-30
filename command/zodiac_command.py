@@ -1,13 +1,12 @@
 # ===============================================================
 #  Copyright (c) 2025 FR RASTA @ownercpkoid
-# 
+#
 #  File ini adalah bagian dari proyek [NAVY USERBOT].
 #  Dilarang menyalin, memodifikasi, atau mendistribusikan kode ini
 #  tanpa izin tertulis dari pemilik.
-# 
+#
 #  Untuk informasi lisensi dan hak cipta, silakan lihat file LICENSE.
 # ===============================================================
-
 
 import asyncio
 import traceback
@@ -17,13 +16,13 @@ import random
 import httpx
 import shutil
 from datetime import datetime, timedelta
-from gpytranslate import Translator
+
+from deep_translator import GoogleTranslator
 
 from pyrogram.errors import ImageProcessFailed
 from config import API_BOTCAHX
 from helpers import Emoji, Tools, animate_proses, horoscope, jodoh_data
 from .gen_img_command import gen_studio
-
 
 
 async def cekjodoh_cmd(client, message):
@@ -34,29 +33,44 @@ async def cekjodoh_cmd(client, message):
         target_user = message.reply_to_message.from_user
     else:
         arg = message.text.split(maxsplit=1)
+
         if len(arg) > 1:
             username = arg[1].strip()
+
             try:
                 target_user = await client.get_users(username)
             except Exception:
-                return await message.reply(f"{em.gagal}**User not found.**")
+                return await message.reply(
+                    f"{em.gagal}**User not found.**"
+                )
         else:
-            return await message.reply(f"{em.gagal}**Please reply or provide the target username/name.**")
+            return await message.reply(
+                f"{em.gagal}**Please reply or provide the target username/name.**"
+            )
 
     proses = await animate_proses(message, em.proses)
     folder = f"downloads/{client.me.id}/"
-      
+
     try:
         data = random.choice(jodoh_data)
+
         ras = data["ras"]
         warnakulit = data["warnakulit"]
         warnarambut = data["warnarambut"]
         penjelasan = data["penjelasan"]
 
-        prompt = f"Romantic digital illustration of a person from {ras} ethnicity, {warnakulit} skin, {warnarambut} hair, soft light, beautiful portrait"
+        prompt = (
+            f"Romantic digital illustration of a person from {ras} ethnicity, "
+            f"{warnakulit} skin, {warnarambut} hair, soft light, beautiful portrait"
+        )
+
         path_dir, files = await gen_studio(folder, prompt)
 
-        mention = f"@{target_user.username}" if target_user.username else target_user.mention
+        mention = (
+            f"@{target_user.username}"
+            if target_user.username
+            else target_user.mention
+        )
 
         caption = f"""
 <blockquote expandable>=========================
@@ -88,17 +102,35 @@ async def cekjodoh_cmd(client, message):
             await message.reply(caption)
 
     except Exception as e:
-        await proses.edit(f"{em.gagal}**There is an error:**\n`{e}`")
+        await proses.edit(
+            f"{em.gagal}**There is an error:**\n`{e}`"
+        )
+
     finally:
         if os.path.exists(folder):
             shutil.rmtree(folder)
 
 
 ZODIAC_EMOJI = {
-    "aries": "♈️", "taurus": "♉️", "gemini": "♊️", "cancer": "♋️", "leo": "♌️", "virgo": "♍️",
-    "libra": "♎️", "scorpio": "♏️", "sagittarius": "♐️", "capricorn": "♑️", "aquarius": "♒️", "pisces": "♓️"
+    "aries": "♈️",
+    "taurus": "♉️",
+    "gemini": "♊️",
+    "cancer": "♋️",
+    "leo": "♌️",
+    "virgo": "♍️",
+    "libra": "♎️",
+    "scorpio": "♏️",
+    "sagittarius": "♐️",
+    "capricorn": "♑️",
+    "aquarius": "♒️",
+    "pisces": "♓️",
 }
-VALID_DAYS = {"yesterday", "today", "tomorrow"}
+
+VALID_DAYS = {
+    "yesterday",
+    "today",
+    "tomorrow",
+}
 
 
 async def horoskop_cmd(client, message):
@@ -109,31 +141,45 @@ async def horoskop_cmd(client, message):
 
     if not arg:
         return await message.reply(
-            f"{em.gagal}**Enter your zodiac sign and day!**\n**Example:** `{message.text.split()[0]} taurus today`"
+            f"{em.gagal}**Enter your zodiac sign and day!**\n"
+            f"**Example:** `{message.text.split()[0]} taurus today`"
         )
 
     args = arg.strip().split()
+
     if len(args) != 2:
         return await message.reply(
-            f"{em.gagal}**Invalid format!**\n**Use:** `zodiak hari`\n**Example:** `{message.text.split()[0]} leo tomorrow`"
+            f"{em.gagal}**Invalid format!**\n"
+            f"**Use:** `zodiak hari`\n"
+            f"**Example:** `{message.text.split()[0]} leo tomorrow`"
         )
 
     zodiac, day = args
+
     zodiac = zodiac.lower()
     day = day.lower()
 
     if zodiac not in ZODIAC_EMOJI:
-        return await message.reply(f"{em.gagal}**Zodiak invalid:** `{zodiac}`")
+        return await message.reply(
+            f"{em.gagal}**Zodiak invalid:** `{zodiac}`"
+        )
+
     if day not in VALID_DAYS:
-        return await message.reply(f"{em.gagal}**Day invalid:** `{day}`")
+        return await message.reply(
+            f"{em.gagal}**Day invalid:** `{day}`"
+        )
 
     proses = await animate_proses(message, em.proses)
     folder = f"downloads/{client.me.id}/"
 
     try:
-        raw_result = await horoscope.get_horoscope(zodiac, day)
+        raw_result = await horoscope.get_horoscope(
+            zodiac,
+            day
+        )
 
         today = datetime.now()
+
         if day == "yesterday":
             date = today - timedelta(days=1)
         elif day == "tomorrow":
@@ -141,21 +187,55 @@ async def horoskop_cmd(client, message):
         else:
             date = today
 
-        formatted_date = date.strftime("%A, %d %B %Y")
-        emoji = ZODIAC_EMOJI.get(zodiac, "✨")
+        formatted_date = date.strftime(
+            "%A, %d %B %Y"
+        )
+
+        emoji = ZODIAC_EMOJI.get(
+            zodiac,
+            "✨"
+        )
+
         zodiac_title = zodiac.capitalize()
 
-        split_raw = raw_result.split("🪄 _", 1)
+        split_raw = raw_result.split(
+            "🪄 _",
+            1
+        )
+
         if len(split_raw) == 2:
-            horoscope_data = split_raw[1].split("_", 1)[0].strip()
+            horoscope_data = split_raw[1].split(
+                "_",
+                1
+            )[0].strip()
         else:
             horoscope_data = raw_result
 
-        translator = Translator()
-        translated = await translator.translate(horoscope_data, targetlang="id")
+        # =====================================================
+        # TRANSLATION
+        # gpytranslate diganti dengan deep-translator
+        # =====================================================
 
-        prompt = f"A digital art representing the daily horoscope for {zodiac_title} on {formatted_date}. {horoscope_data}"
-        path_dir, files = await gen_studio(folder, prompt)
+        translated = await asyncio.to_thread(
+            GoogleTranslator(
+                source="auto",
+                target="id"
+            ).translate,
+            horoscope_data
+        )
+
+        # =====================================================
+
+        prompt = (
+            f"A digital art representing the daily horoscope "
+            f"for {zodiac_title} on {formatted_date}. "
+            f"{horoscope_data}"
+        )
+
+        path_dir, files = await gen_studio(
+            folder,
+            prompt
+        )
 
         caption = f"""
 <blockquote expandable>=========================
@@ -163,7 +243,7 @@ async def horoskop_cmd(client, message):
 📅 <code>{formatted_date}</code>
 =========================
 
-🌐 <i>{translated.text}</i>
+🌐 <i>{translated}</i>
 =========================
 
 🔮 <b>Paranormal:</b> {client.me.mention}
@@ -183,7 +263,10 @@ async def horoskop_cmd(client, message):
             await message.reply(caption)
 
     except Exception as e:
-        await proses.edit(f"{em.gagal}**There is an error:**\n`{e}`")
+        await proses.edit(
+            f"{em.gagal}**There is an error:**\n`{e}`"
+        )
+
     finally:
         if os.path.exists(folder):
             shutil.rmtree(folder)
@@ -191,26 +274,48 @@ async def horoskop_cmd(client, message):
 
 MAX_CAPTION_LENGTH = 4000
 
+
 async def zodiak_cmd(client, message):
     em = Emoji(client)
     await em.get()
-    proses = await animate_proses(message, em.proses)
+
+    proses = await animate_proses(
+        message,
+        em.proses
+    )
 
     ZODIAK_LIST = [
-        "aries", "taurus", "gemini", "cancer", "leo", "virgo",
-        "libra", "scorpio", "sagitarius", "capricorn", "aquarius", "pisces",
+        "aries",
+        "taurus",
+        "gemini",
+        "cancer",
+        "leo",
+        "virgo",
+        "libra",
+        "scorpio",
+        "sagitarius",
+        "capricorn",
+        "aquarius",
+        "pisces",
     ]
 
     if len(message.command) < 2:
         return await proses.edit(
-            f"{em.gagal}**Please give zodiak name\n\n<code>{', '.join([z.capitalize() for z in ZODIAK_LIST])}</code>**"
+            f"{em.gagal}**Please give zodiak name\n\n"
+            f"<code>{', '.join([z.capitalize() for z in ZODIAK_LIST])}</code>**"
         )
 
     try:
-        query = message.text.split(None, 1)[1].strip().lower()
+        query = message.text.split(
+            None,
+            1
+        )[1].strip().lower()
+
     except IndexError:
         return await proses.edit(
-            f"{em.gagal} <b>Please give zodiak name!\n\nExample:</b> <code>{message.text.split()[0]} gemini</code>"
+            f"{em.gagal} <b>Please give zodiak name!\n\n"
+            f"Example:</b> "
+            f"<code>{message.text.split()[0]} gemini</code>"
         )
 
     if query not in ZODIAK_LIST:
@@ -220,20 +325,29 @@ async def zodiak_cmd(client, message):
             f"<code>{', '.join([z.capitalize() for z in ZODIAK_LIST])}</code>"
         )
 
+    folder = f"downloads/{client.me.id}/"
+
     try:
-        url = f"https://api.siputzx.my.id/api/primbon/zodiak?zodiak={query}"
+        url = (
+            "https://api.siputzx.my.id/api/primbon/"
+            f"zodiak?zodiak={query}"
+        )
+
         rp = await Tools.fetch.get(url)
+
         if rp.status_code != 200:
-            return await proses.edit(f"{em.gagal} <b>Gagal mengambil data dari API.</b>")
+            return await proses.edit(
+                f"{em.gagal} <b>Gagal mengambil data dari API.</b>"
+            )
 
         data = rp.json()
+
         if not data.get("status"):
             return await proses.edit(
                 f"{em.gagal} <b>Data tidak ditemukan untuk zodiak ini.</b>"
             )
 
         z = data["data"]
-
 
         deskripsi = (
             f"Ilustrasi artistik zodiak {z['zodiak']}, "
@@ -243,10 +357,10 @@ async def zodiak_cmd(client, message):
             f"simbolis, mistis, indah dan detail."
         )
 
-
-        folder = f"downloads/{client.me.id}/"
-        path_dir, files = await gen_studio(folder, deskripsi)
-
+        path_dir, files = await gen_studio(
+            folder,
+            deskripsi
+        )
 
         teks = f"""
 <b>♈ Zodiak:</b> {z['zodiak']}
@@ -262,9 +376,15 @@ async def zodiak_cmd(client, message):
 <blockquote>{z['pasangan_zodiak']}</blockquote>
 """.strip()
 
-        caption = f"<blockquote expandable>{teks}</blockquote>"
+        caption = (
+            f"<blockquote expandable>{teks}</blockquote>"
+        )
+
         if len(caption) > MAX_CAPTION_LENGTH:
-            caption = caption[:MAX_CAPTION_LENGTH] + "..."
+            caption = (
+                caption[:MAX_CAPTION_LENGTH]
+                + "..."
+            )
 
         await proses.delete()
 
@@ -279,7 +399,10 @@ async def zodiak_cmd(client, message):
             await message.reply(caption)
 
     except Exception as e:
-        await proses.edit(f"{em.gagal} {e}")
+        await proses.edit(
+            f"{em.gagal} {e}"
+        )
+
     finally:
         if os.path.exists(folder):
             shutil.rmtree(folder)
@@ -290,58 +413,103 @@ async def gen_kdm(text):
         {
             "role": "system",
             "content": (
-                "Kamu adalah seorang paranormal Nusantara yang mampu melihat khodam seseorang. "
-                "Khodam itu biasanya disebut sebagai pendamping gaib atau makhluk halus yang dipercaya ikut menjaga "
-                "atau membantu seseorang. Dalam kepercayaan masyarakat Nusantara, khodam bisa berupa jin, malaikat, "
-                "roh leluhur, atau energi gaib yang menempel pada benda (misalnya keris, batu akik, jimat). "
-                "Tugasmu adalah mendeskripsikan khodam yang mungkin ada pada seseorang, termasuk wujud, sifat, asal-usul, "
-                "dan energi yang dipancarkan. Anggap semua input adalah nama seseorang. "
+                "Kamu adalah seorang paranormal Nusantara yang mampu "
+                "melihat khodam seseorang. "
+                "Khodam itu biasanya disebut sebagai pendamping gaib "
+                "atau makhluk halus yang dipercaya ikut menjaga "
+                "atau membantu seseorang. "
+                "Dalam kepercayaan masyarakat Nusantara, khodam bisa "
+                "berupa jin, malaikat, roh leluhur, atau energi gaib "
+                "yang menempel pada benda (misalnya keris, batu akik, jimat). "
+                "Tugasmu adalah mendeskripsikan khodam yang mungkin ada "
+                "pada seseorang, termasuk wujud, sifat, asal-usul, "
+                "dan energi yang dipancarkan. "
+                "Anggap semua input adalah nama seseorang. "
                 "Deskripsi boleh positif atau negatif karena ini hiburan. "
-                "Jawaban maksimal 700 karakter alfabet, dalam bahasa Indonesia, plain text."
+                "Jawaban maksimal 700 karakter alfabet, "
+                "dalam bahasa Indonesia, plain text."
             ),
         },
         {
             "role": "assistant",
             "content": (
-                "Kamu adalah seorang paranormal Nusantara yang mampu melihat khodam seseorang. "
-                "Khodam itu biasanya disebut sebagai pendamping gaib atau makhluk halus yang dipercaya ikut menjaga "
-                "atau membantu seseorang. Dalam kepercayaan masyarakat Nusantara, khodam bisa berupa jin, malaikat, "
-                "roh leluhur, atau energi gaib yang menempel pada benda (misalnya keris, batu akik, jimat). "
-                "Tugasmu adalah mendeskripsikan khodam yang mungkin ada pada seseorang, termasuk wujud, sifat, asal-usul, "
-                "dan energi yang dipancarkan. Anggap semua input adalah nama seseorang. "
+                "Kamu adalah seorang paranormal Nusantara yang mampu "
+                "melihat khodam seseorang. "
+                "Khodam itu biasanya disebut sebagai pendamping gaib "
+                "atau makhluk halus yang dipercaya ikut menjaga "
+                "atau membantu seseorang. "
+                "Dalam kepercayaan masyarakat Nusantara, khodam bisa "
+                "berupa jin, malaikat, roh leluhur, atau energi gaib "
+                "yang menempel pada benda (misalnya keris, batu akik, jimat). "
+                "Tugasmu adalah mendeskripsikan khodam yang mungkin ada "
+                "pada seseorang, termasuk wujud, sifat, asal-usul, "
+                "dan energi yang dipancarkan. "
+                "Anggap semua input adalah nama seseorang. "
                 "Deskripsi boleh positif atau negatif karena ini hiburan. "
-                "Jawaban maksimal 700 karakter alfabet, dalam bahasa Indonesia, plain text."
+                "Jawaban maksimal 700 karakter alfabet, "
+                "dalam bahasa Indonesia, plain text."
             ),
         },
-        {"role": "user", "content": text},
+        {
+            "role": "user",
+            "content": text
+        },
     ]
-    url = "https://api.botcahx.eu.org/api/search/openai-custom"
-    payload = {"message": bahan, "apikey": f"{API_BOTCAHX}"}
-    res = await Tools.fetch.post(url, json=payload)
+
+    url = (
+        "https://api.botcahx.eu.org/"
+        "api/search/openai-custom"
+    )
+
+    payload = {
+        "message": bahan,
+        "apikey": f"{API_BOTCAHX}"
+    }
+
+    res = await Tools.fetch.post(
+        url,
+        json=payload
+    )
+
     if res.status_code == 200:
         data = res.json()
-        return data["result"].replace("\n", "")
-    else:
-        return f"{res.text}"
+        return data["result"].replace(
+            "\n",
+            ""
+        )
+
+    return f"{res.text}"
 
 
 async def khodam_cmd(client, message):
     em = Emoji(client)
     await em.get()
+
     nama = client.get_name(message)
+
     if not nama:
         return await message.reply(
-            f"{em.gagal}**Give the name you want to check the Khodam.**"
+            f"{em.gagal}"
+            f"**Give the name you want to check the Khodam.**"
         )
-    
-    pros = await animate_proses(message, em.proses)
+
+    pros = await animate_proses(
+        message,
+        em.proses
+    )
 
     folder = f"downloads/{client.me.id}/"
+
     try:
         deskripsi_khodam = await gen_kdm(nama)
-        path_dir, files = await gen_studio(folder, deskripsi_khodam)
+
+        path_dir, files = await gen_studio(
+            folder,
+            deskripsi_khodam
+        )
+
         caption = f"""
-<blockquote expandable>=========================       
+<blockquote expandable>=========================
 <b>🕯️ Successfully Checked Khodam</b>
 👤 <b>Name:</b> {nama}
 =========================
@@ -351,10 +519,15 @@ async def khodam_cmd(client, message):
 🔮 <b>Paranormal:</b> {client.me.mention}
 =========================</blockquote>
 """
+
         if len(caption) > MAX_CAPTION_LENGTH:
-            caption = caption[:MAX_CAPTION_LENGTH] + "..."
+            caption = (
+                caption[:MAX_CAPTION_LENGTH]
+                + "..."
+            )
 
         await asyncio.sleep(2)
+
         await pros.delete()
 
         if files:
@@ -369,7 +542,10 @@ async def khodam_cmd(client, message):
 
     except Exception:
         await pros.delete()
-        return await message.reply(f"{em.gagal} {traceback.format_exc()}")
+
+        return await message.reply(
+            f"{em.gagal} {traceback.format_exc()}"
+        )
 
     finally:
         if os.path.exists(folder):
