@@ -243,13 +243,13 @@ async def waifu_cmd(client, message):
         except Exception as error:
             return await proses.edit(f"{em.gagal}**{str(error)}**")
     elif message.command[0] == "waifu":
-        photo = ApiImage.waifu()
+        photo = "https://api.deline.web.id/random/loli"
         try:
             await message.reply_photo(photo)
             return await proses.delete()
         except Exception as error:
             return await proses.edit(f"{em.gagal}**{str(error)}**")
-
+          
 async def pic_cmd(client, message):
     em = Emoji(client)
     await em.get()
