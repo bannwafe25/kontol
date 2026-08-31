@@ -2427,8 +2427,14 @@ async def waifu_callback(_, callback_query):
         buttons = ikb(
             [
                 [
-                    ("🔄 Refresh", f"waifu {owner_id}"),
-                    ("❌ Close", f"waifu_close {owner_id}"),
+                    (
+                        "🔄 Refresh",
+                        f"waifu {owner_id}",
+                    ),
+                    (
+                        "❌ Close",
+                        f"waifu_close {owner_id}",
+                    ),
                 ]
             ]
         )
@@ -2446,7 +2452,6 @@ async def waifu_callback(_, callback_query):
             f"❌ Error: {error}",
             show_alert=True,
         )
-
 
 async def waifu_close(_, callback_query):
     try:
