@@ -2398,7 +2398,6 @@ async def callback_streamings(_, callback_query):
         await client.delete_messages(chat_id, msgid)
         return await skip_songs(c, m, chat_id, True)
 
-
 async def waifu_callback(_, callback_query):
     try:
         data = callback_query.data.split()
@@ -2423,21 +2422,13 @@ async def waifu_callback(_, callback_query):
                 show_alert=True,
             )
 
-        await callback_query.answer(
-            "🔄 Mengambil gambar..."
-        )
+        await callback_query.answer("🔄 Mengambil gambar...")
 
         buttons = ikb(
             [
                 [
-                    (
-                        "🔄 Refresh",
-                        f"waifu {owner_id}",
-                    ),
-                    (
-                        "❌ Close",
-                        f"waifu_close {owner_id}",
-                    ),
+                    ("🔄 Refresh", f"waifu {owner_id}"),
+                    ("❌ Close", f"waifu_close {owner_id}"),
                 ]
             ]
         )
@@ -2482,8 +2473,7 @@ async def waifu_close(_, callback_query):
             )
 
         await callback_query.answer()
-
         return await callback_query.message.delete()
 
     except Exception:
-        return
+        return  
