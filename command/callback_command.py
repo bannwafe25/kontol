@@ -1669,6 +1669,34 @@ async def refresh_cat(_, callback_query):
     else:
         await callback_query.edit_message_text("Failed to refresh cat picture 🙀")
 
+async def refresh_waifu(_, callback_query):
+    if not callback_query.from_user:
+        return await callback_query.answer("User tidak ditemukan.", True)
+
+    uniq = str(callback_query.data.split("_")[2])
+
+    await callback_query.answer("Please wait a minute", True)
+
+    buttons = ikb(
+        [
+            [("🔄 Refresh", f"refresh_waifu_{uniq}")],
+            [("❌ Close", f"close inline_waifu {uniq}")],
+        ]
+    )
+
+    photo_url = "https://api.deline.web.id/random/loli"
+
+    try:
+        await callback_query.edit_message_media(
+            InputMediaPhoto(
+                media=photo_url,
+                caption="<blockquote><b>Waifu ✨</b></blockquote>",
+            ),
+            reply_markup=buttons,
+        )
+    except Exception as error:
+        await callback_query.answer(str(error), True)
+      
 async def rest_anime(_, callback_query):
     if not callback_query.from_user:
         return await callback_query.answer("ANAK ANJING!!", True)
