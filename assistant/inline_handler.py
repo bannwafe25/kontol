@@ -76,7 +76,7 @@ async def _(client, inline_query):
                 results=answerss,
                 cache_time=0,
             )
-       elif text.split()[0] == "inline_waifu":
+        elif text.split()[0] == "inline_waifu":
             answerss = await inline_waifu(answers, inline_query)
             return await client.answer_inline_query(
                 inline_query.id,
