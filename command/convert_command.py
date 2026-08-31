@@ -17,7 +17,7 @@ from bs4 import BeautifulSoup
 from deep_translator import GoogleTranslator
 from PIL import Image
 from pyrogram import raw, types
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
 from pyrogram.enums import MessageMediaType
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
@@ -233,53 +233,22 @@ async def waifu_cmd(client, message):
     em = Emoji(client)
     await em.get()
 
+    message.reply_to_message
     proses = await animate_proses(message, em.proses)
-
     if message.command[0] == "wall":
+        photo = await ApiImage.wall(client)
         try:
-            photo = await ApiImage.wall(client)
-
-            await photo.copy(
-                message.chat.id,
-                reply_to_message_id=message.id
-            )
-
+            await photo.copy(message.chat.id, reply_to_message_id=message.id)
             return await proses.delete()
-
         except Exception as error:
-            return await proses.edit(
-                f"{em.gagal}**{str(error)}**"
-            )
-
+            return await proses.edit(f"{em.gagal}**{str(error)}**")
     elif message.command[0] == "waifu":
+        photo = ApiImage.waifu()
         try:
-            keyboard = InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "🔄 Refresh",
-                            callback_data=f"waifu_next {message.from_user.id}",
-                        ),
-                        InlineKeyboardButton(
-                            "❌ Close",
-                            callback_data=f"waifu_close {message.from_user.id}",
-                        ),
-                    ]
-                ]
-            )
-
-            await message.reply_photo(
-                "https://api.deline.web.id/random/loli",
-                reply_to_message_id=message.id,
-                reply_markup=keyboard,
-            )
-
+            await message.reply_photo(photo)
             return await proses.delete()
-
         except Exception as error:
-            return await proses.edit(
-                f"{em.gagal}**{str(error)}**"
-            )
+            return await proses.edit(f"{em.gagal}**{str(error)}**")
 
 async def pic_cmd(client, message):
     em = Emoji(client)
