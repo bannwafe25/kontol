@@ -13,7 +13,7 @@ from command import (acc_page, back_home,
                      refresh_cat, reset_costum_text, reset_emoji, reset_prefix,
                      rest_anime, restart_userbot,
                      selected_topic, token_cmd, tools_acc, tools_token,
-                     tools_userbot, user_aggre, viewchord, viewgempa)
+                     tools_userbot, user_aggre, viewchord, viewgempa, refresh_waifu)
 from helpers import CMD, trigger
 from logs import logger
 
@@ -76,6 +76,8 @@ async def _(client, callback):
             return await next_font(client, callback)
         elif query.startswith("refresh_cat"):
             return await refresh_cat(client, callback)
+        elif query.startswith("refresh_waifu_"):
+            return await refresh_waifu(client, callback)
             return await bola_matches(client, callback)
         elif query.startswith("restanime_"):
             return await rest_anime(client, callback)
