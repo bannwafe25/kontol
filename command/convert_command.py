@@ -247,17 +247,35 @@ async def waifu_cmd(client, message):
                 f"{em.gagal}**{str(error)}**"
             )
 
-    elif message.command[0] == "waifu":
-        try:
-            await message.reply_photo(
-                "https://api.deline.web.id/random/loli",
-                reply_to_message_id=message.id
-            )
-            return await proses.delete()
-        except Exception as error:
-            return await proses.edit(
-                f"{em.gagal}**{str(error)}**"
-            )
+elif message.command[0] == "waifu":
+    try:
+        keyboard = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "🔄 Refresh",
+                        callback_data=f"waifu {message.from_user.id}",
+                    ),
+                    InlineKeyboardButton(
+                        "❌ Close",
+                        callback_data=f"waifu_close {message.from_user.id}",
+                    ),
+                ]
+            ]
+        )
+
+        await message.reply_photo(
+            "https://api.deline.web.id/random/loli",
+            reply_to_message_id=message.id,
+            reply_markup=keyboard,
+        )
+
+        return await proses.delete()
+
+    except Exception as error:
+        return await proses.edit(
+            f"{em.gagal}**{str(error)}**"
+        )
 
 async def pic_cmd(client, message):
     em = Emoji(client)
