@@ -251,16 +251,16 @@ elif message.command[0] == "waifu":
     try:
         owner_id = message.from_user.id
 
-        buttons = InlineKeyboardMarkup(
+        buttons = ikb(
             [
                 [
-                    Ikb(
-                        "🔄 Next",
-                        callback_data=f"waifu_next {owner_id}",
+                    (
+                        "🔄 Refresh",
+                        f"waifu {owner_id}",
                     ),
-                    Ikb(
+                    (
                         "❌ Close",
-                        callback_data=f"waifu_close {owner_id}",
+                        f"waifu_close {owner_id}",
                     ),
                 ]
             ]
@@ -268,8 +268,9 @@ elif message.command[0] == "waifu":
 
         await message.reply_photo(
             "https://api.deline.web.id/random/loli",
-            reply_to_message_id=message.id,
+            caption="<blockquote><b>🌸 Random Waifu</b></blockquote>",
             reply_markup=buttons,
+            reply_to_message_id=message.id,
         )
 
         return await proses.delete()
