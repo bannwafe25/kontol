@@ -2397,3 +2397,51 @@ async def callback_streamings(_, callback_query):
         msgid = int(data_todelete.get("_id"))
         await client.delete_messages(chat_id, msgid)
         return await skip_songs(c, m, chat_id, True)
+
+
+async def waifu_callback(_, callback_query):
+    try:
+        data = callback_query.data.split()
+
+        if len(data) != 2:
+            return await callback_query.answer(
+                "❌ Callback tidak valid.",
+                show_alert=True,
+            )
+
+        owner_id = int(data[1])
+
+        if callback_query.from_user.id != owner_id:
+            return await callback_query.answer(
+                "❌ Tombol ini bukan untuk kamu.",
+                show_alert=True,
+            )
+
+        await callback_query.answer(
+            "🔄 Mengambil gambar...",
+        )
+
+async def waifu_close(_, callback_query):
+    try:
+        data = callback_query.data.split()
+
+        if len(data) != 2:
+            return await callback_query.answer(
+                "❌ Callback tidak valid.",
+                show_alert=True,
+            )
+
+        owner_id = int(data[1])
+
+        if callback_query.from_user.id != owner_id:
+            return await callback_query.answer(
+                "❌ Tombol ini bukan untuk kamu.",
+                show_alert=True,
+            )
+
+        await callback_query.answer()
+
+        return await callback_query.message.delete()
+
+    except Exception:
+        return
