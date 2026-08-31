@@ -2410,11 +2410,40 @@ async def waifu_callback(_, callback_query):
 
         owner_id = int(data[1])
 
-        if not callback_query.from_user:
+        if callback_query.from_user.id != owner_id:
             return await callback_query.answer(
-                "❌ User tidak ditemukan.",
+                "❌ Tombol ini bukan untuk kamu.",
                 show_alert=True,
             )
+
+        await callback_query.answer(
+            "🔄 Mengambil gambar...",
+        )
+
+        await callback_query.message.edit_media(
+            InputMediaPhoto(
+                "https://api.deline.web.id/random/loli"
+            )
+        )
+
+    except Exception as error:
+        return await callback_query.answer(
+            f"❌ {str(error)}",
+            show_alert=True,
+        )
+
+
+async def waifu_close(_, callback_query):
+    try:
+        data = callback_query.data.split()
+
+        if len(data) != 2:
+            return await callback_query.answer(
+                "❌ Callback tidak valid.",
+                show_alert=True,
+            )
+
+        owner_id = int(data[1])
 
         if callback_query.from_user.id != owner_id:
             return await callback_query.answer(
@@ -2422,36 +2451,12 @@ async def waifu_callback(_, callback_query):
                 show_alert=True,
             )
 
-        await callback_query.answer("🔄 Mengambil gambar...")
+        await callback_query.answer()
 
-        buttons = ikb(
-            [
-                [
-                    (
-                        "🔄 Refresh",
-                        f"waifu {owner_id}",
-                    ),
-                    (
-                        "❌ Close",
-                        f"waifu_close {owner_id}",
-                    ),
-                ]
-            ]
-        )
+        return await callback_query.message.delete()
 
-        await callback_query.edit_message_media(
-            media=InputMediaPhoto(
-                media="https://api.deline.web.id/random/loli",
-                caption="<blockquote><b>🌸 Random Waifu</b></blockquote>",
-            ),
-            reply_markup=buttons,
-        )
-
-    except Exception as error:
-        return await callback_query.answer(
-            f"❌ Error: {error}",
-            show_alert=True,
-        )
+    except Exception:
+        return
 
 async def waifu_close(_, callback_query):
     try:
