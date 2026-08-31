@@ -17,6 +17,7 @@ from bs4 import BeautifulSoup
 from deep_translator import GoogleTranslator
 from PIL import Image
 from pyrogram import raw, types
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import MessageMediaType
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
