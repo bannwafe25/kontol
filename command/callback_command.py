@@ -2423,7 +2423,7 @@ async def waifu_callback(_, callback_query):
                 [
                     InlineKeyboardButton(
                         "🔄 Refresh",
-                        callback_data=f"waifu {owner_id}",
+                        callback_data=f"waifu_next {owner_id}",
                     ),
                     InlineKeyboardButton(
                         "❌ Close",
