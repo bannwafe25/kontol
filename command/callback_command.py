@@ -2424,7 +2424,7 @@ async def waifu_callback(_, callback_query):
             )
 
         await callback_query.answer(
-            "🔄 Mengambil gambar...",
+            "🔄 Mengambil gambar..."
         )
 
         buttons = ikb(
