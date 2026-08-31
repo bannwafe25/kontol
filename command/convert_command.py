@@ -258,7 +258,7 @@ async def waifu_cmd(client, message):
                     [
                         InlineKeyboardButton(
                             "🔄 Refresh",
-                            callback_data=f"waifu {message.from_user.id}",
+                            callback_data=f"waifu_next {message.from_user.id}",
                         ),
                         InlineKeyboardButton(
                             "❌ Close",
