@@ -842,16 +842,14 @@ async def inline_waifu(result, inline_query):
 
     buttons = ikb(
         [
-            [("🔄 Refresh", f"refresh_waifu_{uniq}")],
-            [("❌ Close", f"close inline_waifu {uniq}")],
+            [("Refresh waifu", f"refresh_waifu_{uniq}")],
+            [("Close", f"close inline_waifu {uniq}")],
         ]
     )
 
-    photo_url = "https://api.deline.web.id/random/loli"
-
     result.append(
         InlineQueryResultPhoto(
-            photo_url=photo_url,
+            photo_url="https://api.deline.web.id/random/loli",
             title="Waifu Inline!",
             reply_markup=buttons,
             caption="<blockquote><b>Waifu ✨</b></blockquote>",
