@@ -837,7 +837,29 @@ async def inline_cat(result, inline_query):
 
     return result
 
+async def inline_waifu(result, inline_query):
+    uniq = str(inline_query.query.split()[1])
 
+    buttons = ikb(
+        [
+            [("🔄 Refresh", f"refresh_waifu_{uniq}")],
+            [("❌ Close", f"close inline_waifu {uniq}")],
+        ]
+    )
+
+    photo_url = "https://api.deline.web.id/random/loli"
+
+    result.append(
+        InlineQueryResultPhoto(
+            photo_url=photo_url,
+            title="Waifu Inline!",
+            reply_markup=buttons,
+            caption="<blockquote><b>Waifu ✨</b></blockquote>",
+        )
+    )
+
+    return result
+  
 async def inline_font(result, inline_query):
     get_id = str(inline_query.query.split()[1])
 
