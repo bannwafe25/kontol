@@ -2411,6 +2411,12 @@ async def waifu_callback(_, callback_query):
 
         owner_id = int(data[1])
 
+        if not callback_query.from_user:
+            return await callback_query.answer(
+                "❌ User tidak ditemukan.",
+                show_alert=True,
+            )
+
         if callback_query.from_user.id != owner_id:
             return await callback_query.answer(
                 "❌ Tombol ini bukan untuk kamu.",
@@ -2420,6 +2426,36 @@ async def waifu_callback(_, callback_query):
         await callback_query.answer(
             "🔄 Mengambil gambar...",
         )
+
+        buttons = ikb(
+            [
+                [
+                    (
+                        "🔄 Refresh",
+                        f"waifu {owner_id}",
+                    ),
+                    (
+                        "❌ Close",
+                        f"waifu_close {owner_id}",
+                    ),
+                ]
+            ]
+        )
+
+        await callback_query.edit_message_media(
+            media=InputMediaPhoto(
+                media="https://api.deline.web.id/random/loli",
+                caption="<blockquote><b>🌸 Random Waifu</b></blockquote>",
+            ),
+            reply_markup=buttons,
+        )
+
+    except Exception as error:
+        return await callback_query.answer(
+            f"❌ Error: {error}",
+            show_alert=True,
+        )
+
 
 async def waifu_close(_, callback_query):
     try:
@@ -2432,6 +2468,12 @@ async def waifu_close(_, callback_query):
             )
 
         owner_id = int(data[1])
+
+        if not callback_query.from_user:
+            return await callback_query.answer(
+                "❌ User tidak ditemukan.",
+                show_alert=True,
+            )
 
         if callback_query.from_user.id != owner_id:
             return await callback_query.answer(
