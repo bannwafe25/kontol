@@ -29,7 +29,7 @@ from .callback_command import (acc_page,
                                nxt_ytsearch, nxtbmkg, page_acc,
                                pm_warn, prev_font, prevnext_userbot,
                                refresh_cat, rest_anime, selected_topic, tools_acc,
-                               tools_userbot, viewchord, viewgempa, waifu_next, waifu_close)
+                               tools_userbot, viewchord, viewgempa, waifu_callback, waifu_close)
 from .carbon_command import carbon_cmd
 from .chats_command import (all_cmd, bl_leave, cc_cmd, cekmember_cmd,
                             cekmsg_cmd, cekonline_cmd, cleardb_leave,
@@ -253,7 +253,7 @@ __all__ = [
     "selected_topic",
     "tools_userbot",
     "viewchord",
-    "waifu_next",
+    "waifu_callback",
     "waifu_close",
     "viewgempa",
     "carbon_cmd",
