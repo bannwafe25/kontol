@@ -8,7 +8,7 @@ from command import (alive_inline, button_inline, get_inline_help,
                      inline_cat, inline_chord,
                      inline_font, inline_info, inline_news,
                      inline_streaming, inline_youtube,
-                     pmpermit_inline, send_inline)
+                     pmpermit_inline, send_inline, inline_waifu)
 from helpers import CMD
 from logs import logger
 
@@ -76,6 +76,13 @@ async def _(client, inline_query):
                 results=answerss,
                 cache_time=0,
             )
+       elif text.split()[0] == "inline_waifu":
+            answerss = await inline_waifu(answers, inline_query)
+            return await client.answer_inline_query(
+                inline_query.id,
+                results=answerss,
+                cache_time=0,
+            )   
         elif text.split()[0] == "inline_news":
             answerss = await inline_news(answers, inline_query)
             return await client.answer_inline_query(
