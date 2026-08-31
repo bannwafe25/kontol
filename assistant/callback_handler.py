@@ -13,7 +13,7 @@ from command import (acc_page, back_home,
                      refresh_cat, reset_costum_text, reset_emoji, reset_prefix,
                      rest_anime, restart_userbot,
                      selected_topic, token_cmd, tools_acc, tools_token,
-                     tools_userbot, user_aggre, viewchord, viewgempa)
+                     tools_userbot, user_aggre, viewchord, viewgempa, waifu_callback, waifu_close)
 from helpers import CMD, trigger
 from logs import logger
 
@@ -132,7 +132,10 @@ async def _(client, callback):
             return await nxt_ytsearch(client, callback)
         elif query.startswith("selectedtopic_"):
             return await selected_topic(client, callback)
-
+        elif query.startswith("waifu_next"):
+            return await waifu_callback(client, callback)
+        elif query.startswith("waifu_close"):
+            return await waifu_close(client, callback)
         elif query.startswith("tools_acc"):
             return await tools_acc(client, callback)
         elif query.startswith("acc_page"):
