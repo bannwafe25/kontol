@@ -93,7 +93,10 @@ DEVS = list(
 AKSES_DEPLOY = list(
     map(int, os.environ.get("AKSES_DEPLOY", "7586938131").split())
 )
-
+ASSISTANT_SESSION_STRING = os.environ.get(
+    "ASSISTANT_SESSION_STRING",
+    ""
+)
 OWNER_ID = int(os.environ.get("OWNER_ID",7586938131))
 
 LOG_SELLER = int(os.environ.get("LOG_SELLER",-1003996218782))
