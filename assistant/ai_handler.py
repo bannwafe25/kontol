@@ -34,6 +34,9 @@ MAX_MESSAGE_LENGTH = 4096
 STREAM_DISPLAY_LIMIT = 4000
 STREAM_TIMEOUT = 120
 
+# Kata untuk memanggil bot
+TRIGGER = "babu"
+
 
 # =========================================================
 # MEMORY & LOCK
@@ -178,13 +181,46 @@ async def assistant_ai_handler(client, message):
         return
 
     # =====================================================
+    # GET MESSAGE
+    # =====================================================
+
+    text = (message.text or "").strip()
+
+    if not text:
+        return
+
+    # =====================================================
+    # TRIGGER CHECK
+    # =====================================================
+
+    # Hanya merespons kalau pesan dimulai dengan "babu".
+    #
+    # Contoh:
+    # babu halo
+    # babu jelasin ini
+    # babu tolong bantu
+    #
+    # Tidak akan merespons:
+    # halo
+    # woi
+    # gimana jir
+    # ini babu banget
+
+    if not text.lower().startswith(TRIGGER):
+        return
+
+    # =====================================================
     # GET PROMPT
     # =====================================================
 
-    prompt = message.text.strip()
+    prompt = text[len(TRIGGER):].strip()
 
+    # Kalau cuma "babu"
     if not prompt:
-        return
+
+        return await message.reply_text(
+            "💭 Iya jir, dipanggil babu? Ada apa?"
+        )
 
     chat_id = message.chat.id
 
