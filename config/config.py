@@ -59,7 +59,7 @@ XKIRO_BASE_URL = os.environ.get(
 )
 XKIRO_MODEL = os.environ.get(
     "XKIRO_MODEL",
-    "deepseek/deepseek-v4-pro"
+    "minimax/minimax-m2.1-highspeed:free"
 )
 API_MAELYN = os.environ.get("API_MAELYN", "")
 
