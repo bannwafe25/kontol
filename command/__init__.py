@@ -31,6 +31,7 @@ from .callback_command import (acc_page,
                                refresh_cat, rest_anime, selected_topic, tools_acc,
                                tools_userbot, viewchord, viewgempa, refresh_waifu)
 from .carbon_command import carbon_cmd
+from .xkiro_command import xkiro_cmd
 from .chats_command import (all_cmd, bl_leave, cc_cmd, cekmember_cmd,
                             cekmsg_cmd, cekonline_cmd, cleardb_leave,
                             create_cmd, current_chat_permissions, deleter_cmd,
@@ -133,6 +134,7 @@ from .grooq_command import grooq_cmd
 __all__ = [
     "cekjodoh_cmd",
     "grooq_cmd",
+    "xkiro_cmd",
     "zodiak_cmd", 
     "horoskop_cmd",
     "khodam_cmd", 
