@@ -30,7 +30,7 @@ SYSTEM_PROMPT = (
 # =========================================================
 
 MAX_HISTORY = 20
-EDIT_INTERVAL = 0.7
+EDIT_INTERVAL = 0.5
 STREAM_DISPLAY_LIMIT = 4000
 STREAM_TIMEOUT = 120
 
