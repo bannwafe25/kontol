@@ -3,7 +3,7 @@ import html
 import json
 import time
 
-import aiohttp
+import requests
 from pyrogram import filters
 from pyrogram.enums import ParseMode
 
@@ -18,9 +18,9 @@ from config import (
 
 SYSTEM_PROMPT = (
     "Kamu adalah assistant AI dengan gaya bahasa tongkrongan toxic Indonesia. "
-    "Gunakan bahasa santai, nyablak, singkat, dan mudah dipahami. "
+    "Gunakan bahasa santai, nyablak, dan mudah dipahami. "
     "Boleh menggunakan slang seperti gue, lu, jir, anjir, cuy, wkwk secara natural. "
-    "Jangan terlalu formal. "
+    "Jangan terlalu formal."
 )
 
 
@@ -29,19 +29,14 @@ SYSTEM_PROMPT = (
 # =========================================================
 
 MAX_HISTORY = 20
-
-# Update message setiap 0.3 detik
-EDIT_INTERVAL = 0.3
-
+EDIT_INTERVAL = 0.7
 STREAM_DISPLAY_LIMIT = 4000
+STREAM_TIMEOUT = 120
 
-# Timeout koneksi
-STREAM_TIMEOUT = 90
-
-# Token lebih kecil = biasanya lebih cepat
-MAX_TOKENS = 1024
-
+# Kata untuk mengaktifkan assistant
 TRIGGER = "babu"
+
+# Kata untuk mematikan assistant
 STOP_TRIGGER = "stop"
 
 
@@ -49,13 +44,22 @@ STOP_TRIGGER = "stop"
 # MEMORY
 # =========================================================
 
+# Memory conversation berdasarkan chat/group ID.
 MEMORY = {}
 
 
 # =========================================================
-# ACTIVE CHAT
+# ASSISTANT STATUS
 # =========================================================
 
+# Menyimpan status assistant berdasarkan chat/group ID.
+#
+# Contoh:
+# ACTIVE_CHATS = {
+#     -100123456789: True,
+#     -100987654321: False,
+# }
+#
 ACTIVE_CHATS = {}
 
 
@@ -63,10 +67,12 @@ ACTIVE_CHATS = {}
 # LOCK
 # =========================================================
 
+# Satu request AI per group dalam satu waktu.
 LOCKS = {}
 
 
 def get_history(chat_id):
+    """Ambil atau buat memory untuk group tertentu."""
 
     if chat_id not in MEMORY:
 
@@ -81,6 +87,7 @@ def get_history(chat_id):
 
 
 def get_lock(chat_id):
+    """Lock terpisah untuk setiap group."""
 
     if chat_id not in LOCKS:
         LOCKS[chat_id] = asyncio.Lock()
@@ -88,15 +95,8 @@ def get_lock(chat_id):
     return LOCKS[chat_id]
 
 
-def is_active(chat_id):
-
-    return ACTIVE_CHATS.get(
-        chat_id,
-        False,
-    )
-
-
 def trim_history(chat_id):
+    """Batasi jumlah history conversation."""
 
     history = get_history(chat_id)
 
@@ -108,21 +108,52 @@ def trim_history(chat_id):
         ]
 
 
-def remove_last_user_message(history):
+def is_active(chat_id):
+    """Cek apakah assistant sedang aktif di group."""
 
-    if (
-        history
-        and history[-1].get("role") == "user"
-    ):
-
-        history.pop()
+    return ACTIVE_CHATS.get(
+        chat_id,
+        False,
+    )
 
 
 # =========================================================
-# TELEGRAM
+# XKIRO API
+# =========================================================
+
+def create_stream(messages):
+    """Request streaming ke Xkiro API."""
+
+    return requests.post(
+        f"{XKIRO_BASE_URL.rstrip('/')}/chat/completions",
+
+        headers={
+            "Authorization": f"Bearer {XKIRO_API_KEY}",
+            "Content-Type": "application/json",
+        },
+
+        json={
+            "model": XKIRO_MODEL,
+            "messages": messages,
+            "temperature": 1,
+            "max_tokens": 2048,
+            "stream": True,
+        },
+
+        stream=True,
+        timeout=STREAM_TIMEOUT,
+    )
+
+
+# =========================================================
+# TELEGRAM MESSAGE HELPER
 # =========================================================
 
 def format_blockquote(text):
+    """
+    Escape HTML lalu bungkus response assistant
+    menggunakan blockquote Telegram.
+    """
 
     if not text:
         return "<blockquote>💭</blockquote>"
@@ -132,19 +163,15 @@ def format_blockquote(text):
     if len(escaped) > STREAM_DISPLAY_LIMIT:
 
         escaped = (
-            escaped[
-                :STREAM_DISPLAY_LIMIT - 1
-            ]
+            escaped[:STREAM_DISPLAY_LIMIT - 1]
             + "…"
         )
 
     return f"<blockquote>{escaped}</blockquote>"
 
 
-async def edit_progress(
-    message,
-    text,
-):
+async def edit_progress(message, text):
+    """Update streaming message."""
 
     try:
 
@@ -157,57 +184,15 @@ async def edit_progress(
         pass
 
 
-# =========================================================
-# XKIRO STREAM
-# =========================================================
+async def remove_last_user_message(history):
+    """Hapus pesan user terakhir jika request gagal."""
 
-async def create_stream(messages):
+    if (
+        history
+        and history[-1].get("role") == "user"
+    ):
 
-    timeout = aiohttp.ClientTimeout(
-        total=None,
-        connect=15,
-        sock_read=STREAM_TIMEOUT,
-    )
-
-    session = aiohttp.ClientSession(
-        timeout=timeout
-    )
-
-    try:
-
-        response = await session.post(
-
-            f"{XKIRO_BASE_URL.rstrip('/')}"
-            "/chat/completions",
-
-            headers={
-                "Authorization":
-                    f"Bearer {XKIRO_API_KEY}",
-
-                "Content-Type":
-                    "application/json",
-            },
-
-            json={
-                "model": XKIRO_MODEL,
-
-                "messages": messages,
-
-                "temperature": 1,
-
-                "max_tokens": MAX_TOKENS,
-
-                "stream": True,
-            },
-        )
-
-        return session, response
-
-    except Exception:
-
-        await session.close()
-
-        raise
+        history.pop()
 
 
 # =========================================================
@@ -226,7 +211,7 @@ async def assistant_ai_handler(
 ):
 
     # =====================================================
-    # OWNER CHECK
+    # OWNER SECURITY
     # =====================================================
 
     if not message.from_user:
@@ -236,7 +221,7 @@ async def assistant_ai_handler(
         return
 
     # =====================================================
-    # MESSAGE
+    # GET MESSAGE
     # =====================================================
 
     text = (
@@ -252,59 +237,92 @@ async def assistant_ai_handler(
     text_lower = text.lower()
 
     # =====================================================
-    # ACTIVATE
+    # ACTIVATE WITH "BABU"
     # =====================================================
 
+    #
+    # Kalau assistant belum aktif,
+    # hanya pesan "babu" yang bisa mengaktifkannya.
+    #
     if not is_active(chat_id):
 
-        if not text_lower.startswith(
-            TRIGGER
-        ):
+        if not text_lower.startswith(TRIGGER):
             return
 
+        # Aktifkan assistant
         ACTIVE_CHATS[chat_id] = True
 
+        # Ambil prompt setelah kata "babu"
         prompt = text[
             len(TRIGGER):
         ].strip()
 
+        # Kalau cuma "babu"
         if not prompt:
 
             return await message.reply_text(
-                "🟢 Assistant aktif jir."
+                "🟢 Assistant aktif jir. "
+                "Sekarang ngomong aja, gue bakal jawab. "
+                "Ketik `stop` kalau mau matiin.",
+                parse_mode=ParseMode.MARKDOWN,
             )
 
     # =====================================================
     # STOP
     # =====================================================
 
+    #
+    # Kalau assistant sedang aktif,
+    # pesan "stop" akan mematikannya.
+    #
     if text_lower == STOP_TRIGGER:
 
         ACTIVE_CHATS[chat_id] = False
 
         return await message.reply_text(
-            "🔴 Assistant dimatiin."
+            "🔴 Assistant dimatiin jir."
         )
 
     # =====================================================
-    # PROMPT
+    # GET PROMPT
     # =====================================================
 
-    if text_lower.startswith(TRIGGER):
+    if is_active(chat_id):
 
-        prompt = text[
-            len(TRIGGER):
-        ].strip()
+        # Kalau pesan diawali "babu",
+        # buang kata babu dari prompt.
+        #
+        # Contoh:
+        # babu jelasin ini
+        #
+        # menjadi:
+        # jelasin ini
+        #
+        if text_lower.startswith(TRIGGER):
+
+            prompt = text[
+                len(TRIGGER):
+            ].strip()
+
+        else:
+
+            prompt = text
 
     else:
-
-        prompt = text
-
-    if not prompt:
         return
 
     # =====================================================
-    # CLEAR
+    # EMPTY PROMPT
+    # =====================================================
+
+    if not prompt:
+
+        return await message.reply_text(
+            "💭 Ngomong sesuatu dong jir."
+        )
+
+    # =====================================================
+    # CLEAR MEMORY
     # =====================================================
 
     if prompt.lower() in {
@@ -318,11 +336,11 @@ async def assistant_ai_handler(
         )
 
         return await message.reply_text(
-            "🧹 Memory di-clear jir."
+            "🧹 Memory group ini udah di-clear jir."
         )
 
     # =====================================================
-    # API KEY
+    # API KEY CHECK
     # =====================================================
 
     if not XKIRO_API_KEY:
@@ -332,17 +350,19 @@ async def assistant_ai_handler(
         )
 
     # =====================================================
-    # LOCK
+    # GROUP LOCK
     # =====================================================
 
     async with get_lock(chat_id):
 
-        history = get_history(
-            chat_id
-        )
+        # =================================================
+        # HISTORY
+        # =================================================
+
+        history = get_history(chat_id)
 
         # =================================================
-        # USER MESSAGE
+        # ADD USER MESSAGE
         # =================================================
 
         history.append(
@@ -352,105 +372,89 @@ async def assistant_ai_handler(
             }
         )
 
-        trim_history(
-            chat_id
-        )
+        trim_history(chat_id)
 
-        history = get_history(
-            chat_id
-        )
+        # Ambil ulang setelah trim.
+        history = get_history(chat_id)
 
         # =================================================
         # INITIAL MESSAGE
         # =================================================
 
         progress = await message.reply_text(
-            "💭"
+            "💭",
         )
 
-        session = None
         response = None
-
         result = ""
 
         try:
 
             # =================================================
-            # ASYNC REQUEST
+            # CREATE STREAM
             # =================================================
 
-            session, response = (
-                await create_stream(
-                    history
-                )
+            response = await asyncio.to_thread(
+                create_stream,
+                history,
             )
 
             # =================================================
-            # HTTP ERROR
+            # API ERROR
             # =================================================
 
-            if response.status != 200:
-
-                error_body = ""
+            if response.status_code != 200:
 
                 try:
-
-                    error_body = (
-                        await response.text()
-                    )[:500]
+                    error_body = response.text[:500]
 
                 except Exception:
-                    pass
+                    error_body = ""
 
-                remove_last_user_message(
+                await remove_last_user_message(
                     history
                 )
 
                 if error_body:
 
                     return await progress.edit_text(
-
                         "❌ Xkiro API Error "
-                        f"({response.status})\n"
-                        f"<code>"
-                        f"{html.escape(error_body)}"
-                        f"</code>",
-
+                        f"({response.status_code})\n"
+                        f"<code>{html.escape(error_body)}</code>",
                         parse_mode=ParseMode.HTML,
                     )
 
                 return await progress.edit_text(
                     f"❌ Xkiro API Error "
-                    f"({response.status})"
+                    f"({response.status_code})"
                 )
 
             # =================================================
-            # STREAM
+            # STREAM LOOP
             # =================================================
 
             last_edit = time.monotonic()
 
-            async for raw_line in response.content:
+            for raw_line in response.iter_lines(
+                decode_unicode=True
+            ):
 
                 if not raw_line:
                     continue
 
-                line = raw_line.decode(
-                    "utf-8",
-                    errors="ignore",
-                ).strip()
+                line = raw_line.strip()
 
                 if not line:
                     continue
 
-                if not line.startswith(
-                    "data:"
-                ):
+                # =================================================
+                # SSE
+                # =================================================
+
+                if not line.startswith("data:"):
                     continue
 
-                data = line[
-                    5:
-                ].strip()
+                data = line[5:].strip()
 
                 # =================================================
                 # DONE
@@ -460,7 +464,7 @@ async def assistant_ai_handler(
                     break
 
                 # =================================================
-                # JSON
+                # PARSE JSON
                 # =================================================
 
                 try:
@@ -473,10 +477,12 @@ async def assistant_ai_handler(
 
                     continue
 
+                # =================================================
+                # GET CHOICES
+                # =================================================
+
                 choices = (
-                    chunk.get(
-                        "choices"
-                    )
+                    chunk.get("choices")
                     or []
                 )
 
@@ -498,13 +504,13 @@ async def assistant_ai_handler(
                     continue
 
                 # =================================================
-                # APPEND
+                # APPEND RESPONSE
                 # =================================================
 
                 result += content
 
                 # =================================================
-                # FAST UPDATE
+                # LIVE UPDATE
                 # =================================================
 
                 now = time.monotonic()
@@ -522,12 +528,12 @@ async def assistant_ai_handler(
                     last_edit = now
 
             # =================================================
-            # EMPTY
+            # EMPTY RESPONSE
             # =================================================
 
             if not result.strip():
 
-                remove_last_user_message(
+                await remove_last_user_message(
                     history
                 )
 
@@ -536,7 +542,7 @@ async def assistant_ai_handler(
                 )
 
             # =================================================
-            # SAVE
+            # SAVE ASSISTANT RESPONSE
             # =================================================
 
             history.append(
@@ -546,12 +552,10 @@ async def assistant_ai_handler(
                 }
             )
 
-            trim_history(
-                chat_id
-            )
+            trim_history(chat_id)
 
             # =================================================
-            # FINAL
+            # FINAL RESPONSE
             # =================================================
 
             escaped_result = html.escape(
@@ -563,11 +567,7 @@ async def assistant_ai_handler(
             ) <= STREAM_DISPLAY_LIMIT:
 
                 return await progress.edit_text(
-
-                    format_blockquote(
-                        result
-                    ),
-
+                    format_blockquote(result),
                     parse_mode=ParseMode.HTML,
                 )
 
@@ -580,16 +580,12 @@ async def assistant_ai_handler(
             ]
 
             await progress.edit_text(
-
-                f"<blockquote>"
-                f"{first_chunk}"
-                f"</blockquote>",
-
+                f"<blockquote>{first_chunk}</blockquote>",
                 parse_mode=ParseMode.HTML,
             )
 
             # =================================================
-            # REMAINING
+            # SEND REMAINING CHUNKS
             # =================================================
 
             for i in range(
@@ -599,60 +595,45 @@ async def assistant_ai_handler(
             ):
 
                 chunk = escaped_result[
-                    i:
-                    i + STREAM_DISPLAY_LIMIT
+                    i:i + STREAM_DISPLAY_LIMIT
                 ]
 
                 await message.reply_text(
-
-                    f"<blockquote>"
-                    f"{chunk}"
-                    f"</blockquote>",
-
+                    f"<blockquote>{chunk}</blockquote>",
                     parse_mode=ParseMode.HTML,
                 )
 
                 await asyncio.sleep(
-                    0.1
+                    0.2
                 )
 
         # =====================================================
         # TIMEOUT
         # =====================================================
 
-        except asyncio.TimeoutError:
+        except requests.exceptions.Timeout:
 
-            remove_last_user_message(
+            await remove_last_user_message(
                 history
             )
 
-            try:
-
-                await progress.edit_text(
-                    "❌ Xkiro timeout jir."
-                )
-
-            except Exception:
-                pass
+            await progress.edit_text(
+                "❌ Xkiro timeout jir."
+            )
 
         # =====================================================
         # REQUEST ERROR
         # =====================================================
 
-        except aiohttp.ClientError:
+        except requests.exceptions.RequestException:
 
-            remove_last_user_message(
+            await remove_last_user_message(
                 history
             )
 
-            try:
-
-                await progress.edit_text(
-                    "❌ Gagal konek ke Xkiro."
-                )
-
-            except Exception:
-                pass
+            await progress.edit_text(
+                "❌ Gagal konek ke Xkiro."
+            )
 
         # =====================================================
         # GENERAL ERROR
@@ -660,27 +641,20 @@ async def assistant_ai_handler(
 
         except Exception as error:
 
-            remove_last_user_message(
+            await remove_last_user_message(
                 history
             )
 
-            try:
-
-                await progress.edit_text(
-
-                    "❌ Error: "
-                    + html.escape(
-                        str(error)[:1000]
-                    ),
-
-                    parse_mode=ParseMode.HTML,
-                )
-
-            except Exception:
-                pass
+            await progress.edit_text(
+                "❌ Error: "
+                + html.escape(
+                    str(error)[:1000]
+                ),
+                parse_mode=ParseMode.HTML,
+            )
 
         # =====================================================
-        # CLOSE
+        # CLOSE STREAM
         # =====================================================
 
         finally:
@@ -689,14 +663,6 @@ async def assistant_ai_handler(
 
                 try:
                     response.close()
-
-                except Exception:
-                    pass
-
-            if session is not None:
-
-                try:
-                    await session.close()
 
                 except Exception:
                     pass
