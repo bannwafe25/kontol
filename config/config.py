@@ -59,7 +59,7 @@ XKIRO_BASE_URL = os.environ.get(
 )
 XKIRO_MODEL = os.environ.get(
     "XKIRO_MODEL",
-    "qwen/qwen3.5-flash:free"
+    "minimax/minimax-m2.7-highspeed:free"
 )
 API_MAELYN = os.environ.get("API_MAELYN", "")
 
