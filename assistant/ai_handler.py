@@ -46,7 +46,7 @@ aturan utama:
 # =========================================================
 
 MAX_HISTORY = 20
-EDIT_INTERVAL = 0.5
+EDIT_INTERVAL = 0.3
 STREAM_DISPLAY_LIMIT = 4000
 STREAM_TIMEOUT = 120
 
