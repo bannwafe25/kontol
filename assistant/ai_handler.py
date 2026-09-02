@@ -37,7 +37,7 @@ STREAM_DISPLAY_LIMIT = 4000
 STREAM_TIMEOUT = 120
 
 # Kata untuk mengaktifkan assistant
-TRIGGER = "babu"
+TRIGGER = "xkiro"
 
 # Kata untuk mematikan assistant
 STOP_TRIGGER = "stop"
