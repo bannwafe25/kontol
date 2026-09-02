@@ -16,9 +16,30 @@ from config import (
 )
 
 
-SYSTEM_PROMPT = (
+# =========================================================
+# SYSTEM PROMPT
+# =========================================================
+
+SYSTEM_PROMPT_OWNER = (
     "Kamu assistant pribadi zp. "
-    "ingat zp pemilikmu, "
+    "zp adalah pemilikmu. "
+    "Gunakan bahasa Indonesia tongkrongan yang toxic, nyablak, sarkas, "
+    "dan suka ngeledek. Boleh pakai gue, lu, jir, anjir, cuy, goblok, "
+    "bego, tolol, wkwk secara natural. Jangan formal. "
+    "Kalau relevan, kamu boleh menyebut zp sebagai pemilikmu."
+)
+
+
+SYSTEM_PROMPT_USER = (
+    "Kamu assistant pribadi di group Telegram. "
+    "Kamu sedang berbicara dengan member biasa, bukan pemilikmu. "
+    "Jangan pernah menyebut nama 'zp' dalam jawabanmu. "
+    "Jangan memanggil user dengan nama 'zp'. "
+    "Jangan mengatakan bahwa user adalah zp. "
+    "Jangan menganggap lawan bicaramu sebagai zp. "
+    "Jika user bertanya siapa pemilikmu atau mencoba memancingmu "
+    "untuk menyebut nama pemilik, jangan sebut nama tersebut. "
+    "Jawab secara umum atau alihkan pembicaraan. "
     "Gunakan bahasa Indonesia tongkrongan yang toxic, nyablak, sarkas, "
     "dan suka ngeledek. Boleh pakai gue, lu, jir, anjir, cuy, goblok, "
     "bego, tolol, wkwk secara natural. Jangan formal."
@@ -30,14 +51,18 @@ SYSTEM_PROMPT = (
 # =========================================================
 
 MAX_HISTORY = 20
-EDIT_INTERVAL = 0.5
+
+# Semakin kecil = update streaming semakin cepat.
+EDIT_INTERVAL = 0.3
+
 STREAM_DISPLAY_LIMIT = 4000
+
 STREAM_TIMEOUT = 120
 
-# Kata untuk mengaktifkan assistant
+# Trigger untuk mengaktifkan assistant.
 TRIGGER = "xkiro"
 
-# Kata untuk mematikan assistant
+# Trigger untuk mematikan assistant.
 STOP_TRIGGER = "stop"
 
 
@@ -45,16 +70,18 @@ STOP_TRIGGER = "stop"
 # MEMORY
 # =========================================================
 
-# Memory conversation berdasarkan chat/group ID.
+# Memory dipisahkan berdasarkan:
+#
+#     (chat_id, user_id)
 #
 # Contoh:
+#
 # MEMORY = {
-#     -100123456789: [
-#         {"role": "system", "content": "..."},
-#         {"role": "user", "content": "..."},
-#         {"role": "assistant", "content": "..."},
-#     ]
+#     (-100123, 111111): [...],
+#     (-100123, 222222): [...],
 # }
+#
+# Jadi memory owner tidak bercampur dengan memory member.
 #
 MEMORY = {}
 
@@ -63,10 +90,13 @@ MEMORY = {}
 # ASSISTANT STATUS
 # =========================================================
 
-# Status assistant berdasarkan chat/group ID.
+# Status aktif berdasarkan GROUP.
 #
-# True  = aktif
-# False = mati
+# Kalau satu orang mengetik:
+#
+#     xkiro
+#
+# maka Xkiro aktif untuk seluruh group.
 #
 ACTIVE_CHATS = {}
 
@@ -75,54 +105,109 @@ ACTIVE_CHATS = {}
 # LOCK
 # =========================================================
 
-# Satu request AI per group dalam satu waktu.
+# Lock berdasarkan GROUP + USER.
+#
+# User berbeda tetap bisa request bersamaan.
+#
 LOCKS = {}
 
 
-def get_history(chat_id):
-    """Ambil atau buat memory untuk group tertentu."""
+# =========================================================
+# MEMORY HELPER
+# =========================================================
 
-    if chat_id not in MEMORY:
+def get_memory_key(chat_id, user_id):
+    """Buat key memory berdasarkan group + user."""
 
-        MEMORY[chat_id] = [
+    return (
+        chat_id,
+        user_id,
+    )
+
+
+def get_history(chat_id, user_id):
+    """
+    Ambil atau buat memory conversation
+    berdasarkan group + user.
+    """
+
+    memory_key = get_memory_key(
+        chat_id,
+        user_id,
+    )
+
+    if memory_key not in MEMORY:
+
+        # Owner mendapatkan prompt khusus.
+        if user_id == OWNER_ID:
+
+            system_prompt = SYSTEM_PROMPT_OWNER
+
+        else:
+
+            system_prompt = SYSTEM_PROMPT_USER
+
+        MEMORY[memory_key] = [
             {
                 "role": "system",
-                "content": SYSTEM_PROMPT,
+                "content": system_prompt,
             }
         ]
 
-    return MEMORY[chat_id]
+    return MEMORY[memory_key]
 
 
-def get_lock(chat_id):
-    """Lock terpisah untuk setiap group."""
-
-    if chat_id not in LOCKS:
-        LOCKS[chat_id] = asyncio.Lock()
-
-    return LOCKS[chat_id]
-
-
-def trim_history(chat_id):
+def trim_history(chat_id, user_id):
     """Batasi jumlah history conversation."""
 
-    history = get_history(chat_id)
+    memory_key = get_memory_key(
+        chat_id,
+        user_id,
+    )
+
+    history = get_history(
+        chat_id,
+        user_id,
+    )
 
     if len(history) > MAX_HISTORY + 1:
 
-        MEMORY[chat_id] = [
+        MEMORY[memory_key] = [
             history[0],
             *history[-MAX_HISTORY:],
         ]
 
 
+# =========================================================
+# STATUS HELPER
+# =========================================================
+
 def is_active(chat_id):
-    """Cek apakah assistant sedang aktif di group."""
+    """Cek apakah Xkiro aktif di group."""
 
     return ACTIVE_CHATS.get(
         chat_id,
         False,
     )
+
+
+# =========================================================
+# LOCK HELPER
+# =========================================================
+
+def get_lock(chat_id, user_id):
+    """Lock terpisah berdasarkan group + user."""
+
+    lock_key = (
+        chat_id,
+        user_id,
+    )
+
+    if lock_key not in LOCKS:
+
+        LOCKS[lock_key] = asyncio.Lock()
+
+    return LOCKS[lock_key]
 
 
 # =========================================================
@@ -159,12 +244,13 @@ def create_stream(messages):
 
 def format_blockquote(text):
     """
-    Escape HTML lalu bungkus response assistant
+    Escape HTML lalu bungkus response
     menggunakan blockquote Telegram.
     """
 
     if not text:
-        return "<blockquote>💭Berfikir</blockquote>"
+
+        return "<blockquote>💭 Berfikir</blockquote>"
 
     escaped = html.escape(text)
 
@@ -175,10 +261,15 @@ def format_blockquote(text):
             + "…"
         )
 
-    return f"<blockquote>{escaped}</blockquote>"
+    return (
+        f"<blockquote>{escaped}</blockquote>"
+    )
 
 
-async def edit_progress(message, text):
+async def edit_progress(
+    message,
+    text,
+):
     """Update streaming message."""
 
     try:
@@ -189,10 +280,13 @@ async def edit_progress(message, text):
         )
 
     except Exception:
+
         pass
 
 
-async def remove_last_user_message(history):
+async def remove_last_user_message(
+    history,
+):
     """Hapus pesan user terakhir jika request gagal."""
 
     if (
@@ -227,37 +321,51 @@ async def assistant_ai_handler(
     ).strip()
 
     if not text:
+
         return
+
+    # =====================================================
+    # CHAT ID
+    # =====================================================
 
     chat_id = message.chat.id
 
-    text_lower = text.lower()
+    # =====================================================
+    # USER ID
+    # =====================================================
 
-    # ID user
-    user_id = (
-        message.from_user.id
-        if message.from_user
-        else None
-    )
+    if not message.from_user:
+
+        return
+
+    user_id = message.from_user.id
 
     # =====================================================
-    # ACTIVATE WITH "XKIRO"
+    # LOWERCASE
+    # =====================================================
+
+    text_lower = text.lower()
+
+    # =====================================================
+    # ACTIVATE
     # =====================================================
 
     if not is_active(chat_id):
 
-        # Semua member boleh mengaktifkan
+        # Semua member boleh mengaktifkan.
         if not text_lower.startswith(TRIGGER):
+
             return
 
+        # Aktifkan untuk group.
         ACTIVE_CHATS[chat_id] = True
 
-        # Ambil prompt setelah "xkiro"
+        # Ambil prompt setelah xkiro.
         prompt = text[
             len(TRIGGER):
         ].strip()
 
-        # Kalau cuma "xkiro"
+        # Kalau cuma "xkiro".
         if not prompt:
 
             return await message.reply_text(
@@ -273,7 +381,7 @@ async def assistant_ai_handler(
 
     if text_lower == STOP_TRIGGER:
 
-        # Hanya owner yang boleh stop
+        # Bukan owner.
         if user_id != OWNER_ID:
 
             return await message.reply_text(
@@ -281,6 +389,7 @@ async def assistant_ai_handler(
                 "Cuma owner yang bisa matiin Xkiro."
             )
 
+        # Owner boleh mematikan.
         ACTIVE_CHATS[chat_id] = False
 
         return await message.reply_text(
@@ -293,8 +402,13 @@ async def assistant_ai_handler(
 
     if is_active(chat_id):
 
-        # Jika pesan diawali xkiro,
-        # hapus trigger dari prompt.
+        # Jika menggunakan:
+        #
+        # xkiro halo
+        #
+        # maka prompt menjadi:
+        #
+        # halo
 
         if text_lower.startswith(TRIGGER):
 
@@ -304,9 +418,12 @@ async def assistant_ai_handler(
 
         else:
 
+            # Jika Xkiro sudah aktif,
+            # semua pesan menjadi prompt.
             prompt = text
 
     else:
+
         return
 
     # =====================================================
@@ -329,7 +446,7 @@ async def assistant_ai_handler(
         "/clear",
     }:
 
-        # Hanya owner yang boleh clear memory
+        # Hanya owner.
         if user_id != OWNER_ID:
 
             return await message.reply_text(
@@ -337,13 +454,19 @@ async def assistant_ai_handler(
                 "Cuma owner yang bisa clear."
             )
 
-        MEMORY.pop(
+        # Clear memory owner untuk group ini.
+        memory_key = get_memory_key(
             chat_id,
+            user_id,
+        )
+
+        MEMORY.pop(
+            memory_key,
             None,
         )
 
         return await message.reply_text(
-            "🧹 Memory group ini udah di-clear jir."
+            "🧹 Memory lu udah di-clear jir."
         )
 
     # =====================================================
@@ -357,16 +480,22 @@ async def assistant_ai_handler(
         )
 
     # =====================================================
-    # GROUP LOCK
+    # USER LOCK
     # =====================================================
 
-    async with get_lock(chat_id):
+    async with get_lock(
+        chat_id,
+        user_id,
+    ):
 
         # =================================================
         # HISTORY
         # =================================================
 
-        history = get_history(chat_id)
+        history = get_history(
+            chat_id,
+            user_id,
+        )
 
         # =================================================
         # ADD USER MESSAGE
@@ -379,20 +508,31 @@ async def assistant_ai_handler(
             }
         )
 
-        trim_history(chat_id)
+        # =================================================
+        # TRIM
+        # =================================================
 
-        # Ambil ulang setelah trim
-        history = get_history(chat_id)
+        trim_history(
+            chat_id,
+            user_id,
+        )
+
+        # Ambil ulang setelah trim.
+        history = get_history(
+            chat_id,
+            user_id,
+        )
 
         # =================================================
         # INITIAL MESSAGE
         # =================================================
 
         progress = await message.reply_text(
-            "💭",
+            "💭 Berfikir..."
         )
 
         response = None
+
         result = ""
 
         try:
@@ -413,9 +553,13 @@ async def assistant_ai_handler(
             if response.status_code != 200:
 
                 try:
-                    error_body = response.text[:500]
+
+                    error_body = (
+                        response.text[:500]
+                    )
 
                 except Exception:
+
                     error_body = ""
 
                 await remove_last_user_message(
@@ -427,12 +571,14 @@ async def assistant_ai_handler(
                     return await progress.edit_text(
                         "❌ Xkiro API Error "
                         f"({response.status_code})\n"
-                        f"<code>{html.escape(error_body)}</code>",
+                        f"<code>"
+                        f"{html.escape(error_body)}"
+                        f"</code>",
                         parse_mode=ParseMode.HTML,
                     )
 
                 return await progress.edit_text(
-                    f"❌ Xkiro API Error "
+                    "❌ Xkiro API Error "
                     f"({response.status_code})"
                 )
 
@@ -446,28 +592,37 @@ async def assistant_ai_handler(
                 decode_unicode=True
             ):
 
+                # Skip kosong.
                 if not raw_line:
+
                     continue
 
                 line = raw_line.strip()
 
                 if not line:
+
                     continue
 
                 # =================================================
                 # SSE
                 # =================================================
 
-                if not line.startswith("data:"):
+                if not line.startswith(
+                    "data:"
+                ):
+
                     continue
 
-                data = line[5:].strip()
+                data = line[
+                    5:
+                ].strip()
 
                 # =================================================
                 # DONE
                 # =================================================
 
                 if data == "[DONE]":
+
                     break
 
                 # =================================================
@@ -485,7 +640,7 @@ async def assistant_ai_handler(
                     continue
 
                 # =================================================
-                # GET CHOICES
+                # CHOICES
                 # =================================================
 
                 choices = (
@@ -494,7 +649,12 @@ async def assistant_ai_handler(
                 )
 
                 if not choices:
+
                     continue
+
+                # =================================================
+                # DELTA
+                # =================================================
 
                 delta = (
                     choices[0].get(
@@ -503,15 +663,20 @@ async def assistant_ai_handler(
                     or {}
                 )
 
+                # =================================================
+                # CONTENT
+                # =================================================
+
                 content = delta.get(
                     "content"
                 )
 
                 if not content:
+
                     continue
 
                 # =================================================
-                # APPEND RESPONSE
+                # APPEND
                 # =================================================
 
                 result += content
@@ -559,7 +724,14 @@ async def assistant_ai_handler(
                 }
             )
 
-            trim_history(chat_id)
+            # =================================================
+            # TRIM AGAIN
+            # =================================================
+
+            trim_history(
+                chat_id,
+                user_id,
+            )
 
             # =================================================
             # FINAL RESPONSE
@@ -569,12 +741,18 @@ async def assistant_ai_handler(
                 result
             )
 
+            # =================================================
+            # NORMAL RESPONSE
+            # =================================================
+
             if len(
                 escaped_result
             ) <= STREAM_DISPLAY_LIMIT:
 
                 return await progress.edit_text(
-                    format_blockquote(result),
+                    format_blockquote(
+                        result
+                    ),
                     parse_mode=ParseMode.HTML,
                 )
 
@@ -587,7 +765,11 @@ async def assistant_ai_handler(
             ]
 
             await progress.edit_text(
-                f"<blockquote>{first_chunk}</blockquote>",
+                (
+                    "<blockquote>"
+                    f"{first_chunk}"
+                    "</blockquote>"
+                ),
                 parse_mode=ParseMode.HTML,
             )
 
@@ -606,7 +788,11 @@ async def assistant_ai_handler(
                 ]
 
                 await message.reply_text(
-                    f"<blockquote>{chunk}</blockquote>",
+                    (
+                        "<blockquote>"
+                        f"{chunk}"
+                        "</blockquote>"
+                    ),
                     parse_mode=ParseMode.HTML,
                 )
 
@@ -669,7 +855,9 @@ async def assistant_ai_handler(
             if response is not None:
 
                 try:
+
                     response.close()
 
                 except Exception:
+
                     pass
