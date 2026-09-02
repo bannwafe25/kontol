@@ -52,17 +52,20 @@ SYSTEM_PROMPT_USER = (
 
 MAX_HISTORY = 20
 
-# Semakin kecil = update streaming semakin cepat.
+# Interval update streaming Telegram.
+# Lebih kecil = tampilan lebih realtime,
+# tapi terlalu kecil bisa menyebabkan flood/edit terlalu sering.
 EDIT_INTERVAL = 0.3
 
+# Batas aman panjang satu pesan Telegram.
 STREAM_DISPLAY_LIMIT = 4000
 
 STREAM_TIMEOUT = 120
 
-# Trigger untuk mengaktifkan assistant.
+# Trigger aktivasi.
 TRIGGER = "xkiro"
 
-# Trigger untuk mematikan assistant.
+# Trigger stop.
 STOP_TRIGGER = "stop"
 
 
@@ -74,14 +77,8 @@ STOP_TRIGGER = "stop"
 #
 #     (chat_id, user_id)
 #
-# Contoh:
-#
-# MEMORY = {
-#     (-100123, 111111): [...],
-#     (-100123, 222222): [...],
-# }
-#
-# Jadi memory owner tidak bercampur dengan memory member.
+# Jadi setiap user punya conversation sendiri
+# di masing-masing group.
 #
 MEMORY = {}
 
@@ -90,13 +87,13 @@ MEMORY = {}
 # ASSISTANT STATUS
 # =========================================================
 
-# Status aktif berdasarkan GROUP.
+# Status Xkiro berdasarkan group.
 #
-# Kalau satu orang mengetik:
+# Kalau seseorang mengetik:
 #
 #     xkiro
 #
-# maka Xkiro aktif untuk seluruh group.
+# maka Xkiro aktif untuk group tersebut.
 #
 ACTIVE_CHATS = {}
 
@@ -105,9 +102,11 @@ ACTIVE_CHATS = {}
 # LOCK
 # =========================================================
 
-# Lock berdasarkan GROUP + USER.
+# Lock dipisahkan berdasarkan:
 #
-# User berbeda tetap bisa request bersamaan.
+#     (chat_id, user_id)
+#
+# User berbeda tetap bisa request secara bersamaan.
 #
 LOCKS = {}
 
@@ -117,8 +116,6 @@ LOCKS = {}
 # =========================================================
 
 def get_memory_key(chat_id, user_id):
-    """Buat key memory berdasarkan group + user."""
-
     return (
         chat_id,
         user_id,
@@ -127,8 +124,7 @@ def get_memory_key(chat_id, user_id):
 
 def get_history(chat_id, user_id):
     """
-    Ambil atau buat memory conversation
-    berdasarkan group + user.
+    Ambil atau buat memory berdasarkan group + user.
     """
 
     memory_key = get_memory_key(
@@ -138,13 +134,9 @@ def get_history(chat_id, user_id):
 
     if memory_key not in MEMORY:
 
-        # Owner mendapatkan prompt khusus.
         if user_id == OWNER_ID:
-
             system_prompt = SYSTEM_PROMPT_OWNER
-
         else:
-
             system_prompt = SYSTEM_PROMPT_USER
 
         MEMORY[memory_key] = [
@@ -158,7 +150,9 @@ def get_history(chat_id, user_id):
 
 
 def trim_history(chat_id, user_id):
-    """Batasi jumlah history conversation."""
+    """
+    Batasi jumlah history conversation.
+    """
 
     memory_key = get_memory_key(
         chat_id,
@@ -183,8 +177,6 @@ def trim_history(chat_id, user_id):
 # =========================================================
 
 def is_active(chat_id):
-    """Cek apakah Xkiro aktif di group."""
-
     return ACTIVE_CHATS.get(
         chat_id,
         False,
@@ -196,15 +188,12 @@ def is_active(chat_id):
 # =========================================================
 
 def get_lock(chat_id, user_id):
-    """Lock terpisah berdasarkan group + user."""
-
     lock_key = (
         chat_id,
         user_id,
     )
 
     if lock_key not in LOCKS:
-
         LOCKS[lock_key] = asyncio.Lock()
 
     return LOCKS[lock_key]
@@ -215,7 +204,9 @@ def get_lock(chat_id, user_id):
 # =========================================================
 
 def create_stream(messages):
-    """Request streaming ke Xkiro API."""
+    """
+    Request streaming ke Xkiro API.
+    """
 
     return requests.post(
         f"{XKIRO_BASE_URL.rstrip('/')}/chat/completions",
@@ -223,6 +214,7 @@ def create_stream(messages):
         headers={
             "Authorization": f"Bearer {XKIRO_API_KEY}",
             "Content-Type": "application/json",
+            "Accept": "text/event-stream",
         },
 
         json={
@@ -249,13 +241,11 @@ def format_blockquote(text):
     """
 
     if not text:
-
         return "<blockquote>💭 Berfikir</blockquote>"
 
     escaped = html.escape(text)
 
     if len(escaped) > STREAM_DISPLAY_LIMIT:
-
         escaped = (
             escaped[:STREAM_DISPLAY_LIMIT - 1]
             + "…"
@@ -270,7 +260,9 @@ async def edit_progress(
     message,
     text,
 ):
-    """Update streaming message."""
+    """
+    Update streaming message.
+    """
 
     try:
 
@@ -284,10 +276,71 @@ async def edit_progress(
         pass
 
 
+def decode_sse_line(raw_line):
+    """
+    Decode SSE byte secara eksplisit menggunakan UTF-8.
+
+    Ini mencegah mojibake seperti:
+
+        🤙 -> Ã°ÂŸÂ¤Â™
+
+        —  -> â€”
+
+        ™  -> â„¢
+    """
+
+    if isinstance(raw_line, bytes):
+
+        try:
+            return raw_line.decode(
+                "utf-8"
+            )
+
+        except UnicodeDecodeError:
+
+            return raw_line.decode(
+                "utf-8",
+                errors="replace",
+            )
+
+    return raw_line
+
+
+def clean_non_owner_response(
+    text,
+    user_id,
+):
+    """
+    Safety tambahan untuk member biasa.
+
+    Prompt sudah melarang penyebutan 'zp'.
+    Fungsi ini hanya sebagai filter tambahan.
+    """
+
+    if user_id == OWNER_ID:
+        return text
+
+    return text.replace(
+        "zp",
+        "[pemilik]",
+    ).replace(
+        "ZP",
+        "[pemilik]",
+    ).replace(
+        "Zp",
+        "[pemilik]",
+    ).replace(
+        "zP",
+        "[pemilik]",
+    )
+
+
 async def remove_last_user_message(
     history,
 ):
-    """Hapus pesan user terakhir jika request gagal."""
+    """
+    Hapus pesan user terakhir jika request gagal.
+    """
 
     if (
         history
@@ -321,7 +374,6 @@ async def assistant_ai_handler(
     ).strip()
 
     if not text:
-
         return
 
     # =====================================================
@@ -335,7 +387,6 @@ async def assistant_ai_handler(
     # =====================================================
 
     if not message.from_user:
-
         return
 
     user_id = message.from_user.id
@@ -354,7 +405,6 @@ async def assistant_ai_handler(
 
         # Semua member boleh mengaktifkan.
         if not text_lower.startswith(TRIGGER):
-
             return
 
         # Aktifkan untuk group.
@@ -381,7 +431,6 @@ async def assistant_ai_handler(
 
     if text_lower == STOP_TRIGGER:
 
-        # Bukan owner.
         if user_id != OWNER_ID:
 
             return await message.reply_text(
@@ -389,7 +438,6 @@ async def assistant_ai_handler(
                 "Cuma owner yang bisa matiin Xkiro."
             )
 
-        # Owner boleh mematikan.
         ACTIVE_CHATS[chat_id] = False
 
         return await message.reply_text(
@@ -402,14 +450,6 @@ async def assistant_ai_handler(
 
     if is_active(chat_id):
 
-        # Jika menggunakan:
-        #
-        # xkiro halo
-        #
-        # maka prompt menjadi:
-        #
-        # halo
-
         if text_lower.startswith(TRIGGER):
 
             prompt = text[
@@ -418,8 +458,6 @@ async def assistant_ai_handler(
 
         else:
 
-            # Jika Xkiro sudah aktif,
-            # semua pesan menjadi prompt.
             prompt = text
 
     else:
@@ -446,7 +484,6 @@ async def assistant_ai_handler(
         "/clear",
     }:
 
-        # Hanya owner.
         if user_id != OWNER_ID:
 
             return await message.reply_text(
@@ -454,7 +491,6 @@ async def assistant_ai_handler(
                 "Cuma owner yang bisa clear."
             )
 
-        # Clear memory owner untuk group ini.
         memory_key = get_memory_key(
             chat_id,
             user_id,
@@ -517,7 +553,6 @@ async def assistant_ai_handler(
             user_id,
         )
 
-        # Ambil ulang setelah trim.
         history = get_history(
             chat_id,
             user_id,
@@ -545,6 +580,12 @@ async def assistant_ai_handler(
                 create_stream,
                 history,
             )
+
+            # =================================================
+            # FORCE UTF-8
+            # =================================================
+
+            response.encoding = "utf-8"
 
             # =================================================
             # API ERROR
@@ -589,45 +630,50 @@ async def assistant_ai_handler(
             last_edit = time.monotonic()
 
             for raw_line in response.iter_lines(
-                decode_unicode=True
+                decode_unicode=False
             ):
 
-                # Skip kosong.
-                if not raw_line:
+                # =============================================
+                # SKIP EMPTY
+                # =============================================
 
+                if not raw_line:
                     continue
 
-                line = raw_line.strip()
+                # =============================================
+                # UTF-8 DECODE
+                # =============================================
+
+                line = decode_sse_line(
+                    raw_line
+                ).strip()
 
                 if not line:
-
                     continue
 
-                # =================================================
-                # SSE
-                # =================================================
+                # =============================================
+                # SSE DATA
+                # =============================================
 
                 if not line.startswith(
                     "data:"
                 ):
-
                     continue
 
                 data = line[
                     5:
                 ].strip()
 
-                # =================================================
+                # =============================================
                 # DONE
-                # =================================================
+                # =============================================
 
                 if data == "[DONE]":
-
                     break
 
-                # =================================================
-                # PARSE JSON
-                # =================================================
+                # =============================================
+                # JSON
+                # =============================================
 
                 try:
 
@@ -639,9 +685,9 @@ async def assistant_ai_handler(
 
                     continue
 
-                # =================================================
+                # =============================================
                 # CHOICES
-                # =================================================
+                # =============================================
 
                 choices = (
                     chunk.get("choices")
@@ -649,12 +695,11 @@ async def assistant_ai_handler(
                 )
 
                 if not choices:
-
                     continue
 
-                # =================================================
+                # =============================================
                 # DELTA
-                # =================================================
+                # =============================================
 
                 delta = (
                     choices[0].get(
@@ -663,27 +708,26 @@ async def assistant_ai_handler(
                     or {}
                 )
 
-                # =================================================
+                # =============================================
                 # CONTENT
-                # =================================================
+                # =============================================
 
                 content = delta.get(
                     "content"
                 )
 
                 if not content:
-
                     continue
 
-                # =================================================
+                # =============================================
                 # APPEND
-                # =================================================
+                # =============================================
 
                 result += content
 
-                # =================================================
+                # =============================================
                 # LIVE UPDATE
-                # =================================================
+                # =============================================
 
                 now = time.monotonic()
 
@@ -692,9 +736,17 @@ async def assistant_ai_handler(
                     >= EDIT_INTERVAL
                 ):
 
+                    # Filter tambahan untuk member.
+                    display_result = (
+                        clean_non_owner_response(
+                            result,
+                            user_id,
+                        )
+                    )
+
                     await edit_progress(
                         progress,
-                        result,
+                        display_result,
                     )
 
                     last_edit = now
@@ -714,13 +766,24 @@ async def assistant_ai_handler(
                 )
 
             # =================================================
+            # CLEAN FINAL RESPONSE
+            # =================================================
+
+            final_result = (
+                clean_non_owner_response(
+                    result,
+                    user_id,
+                )
+            )
+
+            # =================================================
             # SAVE ASSISTANT RESPONSE
             # =================================================
 
             history.append(
                 {
                     "role": "assistant",
-                    "content": result,
+                    "content": final_result,
                 }
             )
 
@@ -734,11 +797,11 @@ async def assistant_ai_handler(
             )
 
             # =================================================
-            # FINAL RESPONSE
+            # ESCAPE HTML
             # =================================================
 
             escaped_result = html.escape(
-                result
+                final_result
             )
 
             # =================================================
@@ -751,7 +814,7 @@ async def assistant_ai_handler(
 
                 return await progress.edit_text(
                     format_blockquote(
-                        result
+                        final_result
                     ),
                     parse_mode=ParseMode.HTML,
                 )
