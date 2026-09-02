@@ -46,6 +46,16 @@ STOP_TRIGGER = "stop"
 # =========================================================
 
 # Memory conversation berdasarkan chat/group ID.
+#
+# Contoh:
+# MEMORY = {
+#     -100123456789: [
+#         {"role": "system", "content": "..."},
+#         {"role": "user", "content": "..."},
+#         {"role": "assistant", "content": "..."},
+#     ]
+# }
+#
 MEMORY = {}
 
 
@@ -53,13 +63,10 @@ MEMORY = {}
 # ASSISTANT STATUS
 # =========================================================
 
-# Menyimpan status assistant berdasarkan chat/group ID.
+# Status assistant berdasarkan chat/group ID.
 #
-# Contoh:
-# ACTIVE_CHATS = {
-#     -100123456789: True,
-#     -100987654321: False,
-# }
+# True  = aktif
+# False = mati
 #
 ACTIVE_CHATS = {}
 
@@ -157,7 +164,7 @@ def format_blockquote(text):
     """
 
     if not text:
-        return "<blockquote>💭</blockquote>"
+        return "<blockquote>💭Berfikir</blockquote>"
 
     escaped = html.escape(text)
 
@@ -204,22 +211,11 @@ async def remove_last_user_message(history):
     filters.group
     & filters.incoming
     & filters.text
-    & filters.user(OWNER_ID)
 )
 async def assistant_ai_handler(
     client,
     message,
 ):
-
-    # =====================================================
-    # OWNER SECURITY
-    # =====================================================
-
-    if not message.from_user:
-        return
-
-    if message.from_user.id != OWNER_ID:
-        return
 
     # =====================================================
     # GET MESSAGE
@@ -237,46 +233,53 @@ async def assistant_ai_handler(
 
     text_lower = text.lower()
 
+    # ID user
+    user_id = (
+        message.from_user.id
+        if message.from_user
+        else None
+    )
+
     # =====================================================
-    # ACTIVATE WITH "BABU"
+    # ACTIVATE WITH "XKIRO"
     # =====================================================
 
-    #
-    # Kalau assistant belum aktif,
-    # hanya pesan "babu" yang bisa mengaktifkannya.
-    #
     if not is_active(chat_id):
 
+        # Semua member boleh mengaktifkan
         if not text_lower.startswith(TRIGGER):
             return
 
-        # Aktifkan assistant
         ACTIVE_CHATS[chat_id] = True
 
-        # Ambil prompt setelah kata "babu"
+        # Ambil prompt setelah "xkiro"
         prompt = text[
             len(TRIGGER):
         ].strip()
 
-        # Kalau cuma "babu"
+        # Kalau cuma "xkiro"
         if not prompt:
 
             return await message.reply_text(
                 "🟢 Assistant aktif jir. "
                 "Sekarang ngomong aja, gue bakal jawab. "
-                "Ketik `stop` kalau mau matiin.",
-                parse_mode=ParseMode.MARKDOWN,
+                "Ketik `stop` kalau mau matiin."
             )
 
     # =====================================================
     # STOP
+    # OWNER ONLY
     # =====================================================
 
-    #
-    # Kalau assistant sedang aktif,
-    # pesan "stop" akan mematikannya.
-    #
     if text_lower == STOP_TRIGGER:
+
+        # Hanya owner yang boleh stop
+        if user_id != OWNER_ID:
+
+            return await message.reply_text(
+                "🚫 Lu siapa jir? "
+                "Cuma owner yang bisa matiin Xkiro."
+            )
 
         ACTIVE_CHATS[chat_id] = False
 
@@ -290,15 +293,9 @@ async def assistant_ai_handler(
 
     if is_active(chat_id):
 
-        # Kalau pesan diawali "babu",
-        # buang kata babu dari prompt.
-        #
-        # Contoh:
-        # babu jelasin ini
-        #
-        # menjadi:
-        # jelasin ini
-        #
+        # Jika pesan diawali xkiro,
+        # hapus trigger dari prompt.
+
         if text_lower.startswith(TRIGGER):
 
             prompt = text[
@@ -324,12 +321,21 @@ async def assistant_ai_handler(
 
     # =====================================================
     # CLEAR MEMORY
+    # OWNER ONLY
     # =====================================================
 
     if prompt.lower() in {
         "clear",
         "/clear",
     }:
+
+        # Hanya owner yang boleh clear memory
+        if user_id != OWNER_ID:
+
+            return await message.reply_text(
+                "🚫 Memory jangan lu obrak-abrik jir. "
+                "Cuma owner yang bisa clear."
+            )
 
         MEMORY.pop(
             chat_id,
@@ -375,7 +381,7 @@ async def assistant_ai_handler(
 
         trim_history(chat_id)
 
-        # Ambil ulang setelah trim.
+        # Ambil ulang setelah trim
         history = get_history(chat_id)
 
         # =================================================
