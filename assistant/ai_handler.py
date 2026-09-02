@@ -22,14 +22,32 @@ from config import (
 # =========================================================
 
 SYSTEM_PROMPT_OWNER = (
-    "Kamu adalah assistant pribadi zp. Persona kamu adalah temen tongkrongan yang toxic parah, nyebelin, sarkas, "
-    "dan mulutnya gak ada saringannya. Gunakan kata ganti 'Lu' untuk user (zp) dan 'Gw' untuk kamu. "
-    "Wajib pakai bahasa tongkrongan Indonesia kasual yang disisipi kata-kata toxic (anjing, nyet, goblok, tolol, bangsat, dll) "
-    "tapi murni dalam konteks nongkrong/bercanda. Kalau ditanya hal gampang, hina dulu usernya karena males mikir atau googling. "
-    "Kalau disuruh ngerjain tugas panjang, ngeluh dulu ngerasa direpotin. "
-    "Jangan pernah pakai bahasa baku atau kaku. Haram pakai kata 'Halo' atau 'Maaf'. "
-    "TETAP berikan jawaban atau solusi yang 100% akurat di balik semua bacotan lu. "
-    "Jangan selalu memakai bullet, nomor, atau heading. Gunakan HTML Telegram hanya jika memang diperlukan."
+    "Aku assistant pribadi zp. "
+    "Gaya ngobrol gua harus santai, nyablak, spontan, dan gak lebay. "
+    "Ngomong kayak anak tongkrongan di grup Telegram, "
+    "bukan kayak customer service atau AI formal. "
+
+    "Aturan gua: "
+    "Pake bahasa Indonesia sehari-hari dan lowercase. "
+    "Boleh pake gue, gua, lu, lo, jir, njir, anjir, cuy, bro, wkwk. "
+    "Kalau pertanyaan bodoh, langsung sindir atau ledek. "
+    "Kalau zp bercanda, balas bercanda. "
+    "Kalau zp nyolot, boleh nyolot balik. "
+    "Jangan selalu bilang tentu, berikut, atau semoga membantu. "
+    "Jawaban pendek kalau pertanyaannya simpel. "
+    "Gak perlu pake bullet point atau heading everywhere. "
+    "Kalau gak tau, bilang gak tau, jangan ngaco. "
+
+    "PENTING: "
+    "Gunakan bahasa Indonesia sebagai bahasa utama. "
+    "Jangan tiba-tiba menggunakan bahasa Mandarin, Jepang, Korea, "
+    "Jerman, Italia, Spanyol, atau bahasa asing lainnya "
+    "kecuali zp memang meminta menggunakan bahasa tersebut. "
+    "Jangan menyisipkan kata asing secara random. "
+    "Kalau ada kata asing yang tidak sengaja muncul, "
+    "ganti dengan padanan bahasa Indonesia. "
+
+    "Intinya: jadiin gua temen chat, bukan pelayan."
 )
 
 
@@ -157,6 +175,52 @@ def strip_html_tags(text):
         "",
         text,
     )
+
+
+# =========================================================
+# CLEAN RANDOM FOREIGN CHARACTERS
+# =========================================================
+
+def clean_ai_response(text):
+    if not text:
+        return ""
+
+    # Hapus karakter Mandarin / Han
+    text = re.sub(
+        r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]",
+        "",
+        text,
+    )
+
+    # Hapus Hangul Korea
+    text = re.sub(
+        r"[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]",
+        "",
+        text,
+    )
+
+    # Hapus Hiragana dan Katakana Jepang
+    text = re.sub(
+        r"[\u3040-\u30FF\u31F0-\u31FF]",
+        "",
+        text,
+    )
+
+    # Rapihin spasi
+    text = re.sub(
+        r"[ \t]{2,}",
+        " ",
+        text,
+    )
+
+    # Rapihin baris kosong
+    text = re.sub(
+        r"\n{3,}",
+        "\n\n",
+        text,
+    )
+
+    return text.strip()
 
 
 # =========================================================
@@ -888,6 +952,14 @@ async def assistant_ai_handler(
                     last_edit_time = (
                         current_time
                     )
+
+            # =================================================
+            # CLEAN RANDOM FOREIGN CHARACTERS
+            # =================================================
+
+            full_response = clean_ai_response(
+                full_response
+            )
 
             # =================================================
             # EMPTY RESPONSE
