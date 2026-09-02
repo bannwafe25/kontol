@@ -48,8 +48,6 @@ STREAM_TIMEOUT = 120
 TRIGGER = "xkiro"
 STOP_TRIGGER = "stop"
 
-DELETE_DELAY = 1.0
-
 
 # =========================================================
 # MEMORY
@@ -236,45 +234,6 @@ async def safe_delete(message):
 
     except Exception:
         pass
-
-
-# =========================================================
-# DELETE GENERATED MESSAGES
-# =========================================================
-
-async def delete_generated_messages(
-    messages,
-):
-    if not messages:
-        return
-
-    await asyncio.sleep(
-        DELETE_DELAY
-    )
-
-    for generated_message in messages:
-        await safe_delete(
-            generated_message
-        )
-
-
-# =========================================================
-# DELETE ONE GENERATED MESSAGE
-# =========================================================
-
-async def delete_one_generated_message(
-    message,
-):
-    if message is None:
-        return
-
-    await asyncio.sleep(
-        DELETE_DELAY
-    )
-
-    await safe_delete(
-        message
-    )
 
 
 # =========================================================
@@ -511,23 +470,14 @@ async def assistant_ai_handler(
             chat_id
         ] = False
 
-        generated_message = await safe_reply(
-            message,
-            "🔴 <b>Assistant dimatiin jir.</b>",
-        )
-
-        # Hapus pesan owner juga
         await safe_delete(
             message
         )
 
-        # Hapus response bot
-        if generated_message:
-            asyncio.create_task(
-                delete_one_generated_message(
-                    generated_message
-                )
-            )
+        await safe_reply(
+            message,
+            "🔴 <b>Assistant dimatiin jir.</b>",
+        )
 
         return
 
@@ -550,23 +500,14 @@ async def assistant_ai_handler(
             None,
         )
 
-        generated_message = await safe_reply(
-            message,
-            "🧹 <b>Memory lu udah di-clear jir.</b>",
-        )
-
-        # Hapus command owner
         await safe_delete(
             message
         )
 
-        # Hapus response bot
-        if generated_message:
-            asyncio.create_task(
-                delete_one_generated_message(
-                    generated_message
-                )
-            )
+        await safe_reply(
+            message,
+            "🧹 <b>Memory lu udah di-clear jir.</b>",
+        )
 
         return
 
@@ -602,7 +543,11 @@ async def assistant_ai_handler(
 
     if not prompt:
 
-        generated_message = await safe_reply(
+        await safe_delete(
+            message
+        )
+
+        await safe_reply(
             message,
             (
                 "🟢 <b>Assistant aktif jir.</b>\n"
@@ -610,17 +555,6 @@ async def assistant_ai_handler(
                 "Ketik <code>stop</code> kalau mau matiin."
             ),
         )
-
-        await safe_delete(
-            message
-        )
-
-        if generated_message:
-            asyncio.create_task(
-                delete_one_generated_message(
-                    generated_message
-                )
-            )
 
         return
 
@@ -630,21 +564,14 @@ async def assistant_ai_handler(
 
     if not XKIRO_API_KEY:
 
-        generated_message = await safe_reply(
-            message,
-            "❌ <b>XKIRO_API_KEY belum diatur.</b>",
-        )
-
         await safe_delete(
             message
         )
 
-        if generated_message:
-            asyncio.create_task(
-                delete_one_generated_message(
-                    generated_message
-                )
-            )
+        await safe_reply(
+            message,
+            "❌ <b>XKIRO_API_KEY belum diatur.</b>",
+        )
 
         return
 
@@ -659,24 +586,17 @@ async def assistant_ai_handler(
 
     if lock.locked():
 
-        generated_message = await safe_reply(
+        await safe_delete(
+            message
+        )
+
+        await safe_reply(
             message,
             (
                 "⏳ <i>Sabar napa jir, "
                 "gue masih mikir yang tadi.</i>"
             ),
         )
-
-        await safe_delete(
-            message
-        )
-
-        if generated_message:
-            asyncio.create_task(
-                delete_one_generated_message(
-                    generated_message
-                )
-            )
 
         return
 
@@ -707,7 +627,7 @@ async def assistant_ai_handler(
         )
 
         # =================================================
-        # TRIM
+        # TRIM HISTORY
         # =================================================
 
         trim_history(
@@ -721,12 +641,6 @@ async def assistant_ai_handler(
         )
 
         # =================================================
-        # GENERATED MESSAGES
-        # =================================================
-
-        generated_messages = []
-
-        # =================================================
         # THINKING MESSAGE
         # =================================================
 
@@ -735,10 +649,6 @@ async def assistant_ai_handler(
             reply_msg = await message.reply_text(
                 "💭 <i>Berfikir...</i>",
                 parse_mode=ParseMode.HTML,
-            )
-
-            generated_messages.append(
-                reply_msg
             )
 
         except Exception:
@@ -859,7 +769,7 @@ async def assistant_ai_handler(
                     continue
 
                 # =========================================
-                # DECODE UTF-8
+                # UTF-8 DECODE
                 # =========================================
 
                 line = decode_sse_line(
@@ -962,7 +872,7 @@ async def assistant_ai_handler(
                     break
 
                 # =========================================
-                # EDIT
+                # EDIT TIMER
                 # =========================================
 
                 current_time = time.monotonic()
@@ -1075,14 +985,8 @@ async def assistant_ai_handler(
 
                 try:
 
-                    extra_message = (
-                        await message.reply_text(
-                            chunk
-                        )
-                    )
-
-                    generated_messages.append(
-                        extra_message
+                    await reply_msg.reply_text(
+                        chunk
                     )
 
                 except Exception:
@@ -1160,7 +1064,3 @@ async def assistant_ai_handler(
 
                 except Exception:
                     pass
-
-            await delete_generated_messages(
-                generated_messages
-            )
