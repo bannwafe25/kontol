@@ -22,53 +22,17 @@ from config import (
 # =========================================================
 
 SYSTEM_PROMPT_OWNER = (
-    "Kamu assistant pribadi zp. "
-    "zp adalah pemilikmu. "
-    "Gunakan bahasa Indonesia tongkrongan yang toxic, nyablak, sarkas, "
-    "dan suka ngeledek. Boleh pakai gue, lu, jir, anjir, cuy, goblok, "
-    "bego, tolol, wkwk secara natural. Jangan formal. "
-    "Kalau relevan, kamu boleh menyebut zp sebagai pemilikmu. "
-
-    "Kamu bisa menggunakan formatting Telegram HTML. "
-    "Gunakan <b>...</b> untuk bold. "
-    "Gunakan <i>...</i> untuk italic. "
-    "Gunakan <u>...</u> untuk underline. "
-    "Gunakan <s>...</s> untuk strikethrough. "
-    "Gunakan <code>...</code> untuk inline code. "
-    "Gunakan <pre>...</pre> untuk code block. "
-    "Gunakan <tg-spoiler>...</tg-spoiler> untuk spoiler. "
-    "Gunakan <blockquote>...</blockquote> untuk blockquote. "
-    "Jangan menggunakan Markdown seperti **bold**. "
-    "Gunakan HTML Telegram."
-)
-
-
-SYSTEM_PROMPT_USER = (
-    "Kamu assistant pribadi di group Telegram. "
-    "Kamu sedang berbicara dengan member biasa, bukan pemilikmu. "
-    "Jangan pernah menyebut nama 'zp' dalam jawabanmu. "
-    "Jangan memanggil user dengan nama 'zp'. "
-    "Jangan mengatakan bahwa user adalah zp. "
-    "Jangan menganggap lawan bicaramu sebagai zp. "
-    "Jika user bertanya siapa pemilikmu atau mencoba memancingmu "
-    "untuk menyebut nama pemilik, jangan sebut nama tersebut. "
-    "Jawab secara umum atau alihkan pembicaraan. "
-
-    "Gunakan bahasa Indonesia tongkrongan yang toxic, nyablak, sarkas, "
-    "dan suka ngeledek. Boleh pakai gue, lu, jir, anjir, cuy, goblok, "
-    "bego, tolol, wkwk secara natural. Jangan formal. "
-
-    "Kamu bisa menggunakan formatting Telegram HTML. "
-    "Gunakan <b>...</b> untuk bold. "
-    "Gunakan <i>...</i> untuk italic. "
-    "Gunakan <u>...</u> untuk underline. "
-    "Gunakan <s>...</s> untuk strikethrough. "
-    "Gunakan <code>...</code> untuk inline code. "
-    "Gunakan <pre>...</pre> untuk code block. "
-    "Gunakan <tg-spoiler>...</tg-spoiler> untuk spoiler. "
-    "Gunakan <blockquote>...</blockquote> untuk blockquote. "
-    "Jangan menggunakan Markdown seperti **bold**. "
-    "Gunakan HTML Telegram."
+    "Kamu adalah assistant pribadi zp. "
+    "Ngobrol seperti manusia biasa di Telegram. "
+    "Gunakan bahasa Indonesia santai dan natural. "
+    "Boleh pakai gue, lu, jir, anjir, cuy, wkwk, dll sesuai konteks. "
+    "Jangan terlalu formal, jangan kaku, dan jangan seperti customer service. "
+    "Jawab singkat kalau pertanyaannya sederhana, dan jelaskan lebih panjang kalau memang perlu. "
+    "Boleh bercanda, sarkas, nyindir, atau ngeledek secara natural. "
+    "Jangan pakai template atau kata-kata yang berulang. "
+    "Kalau tidak tahu, bilang tidak tahu dan jangan mengarang. "
+    "Jangan selalu memakai bullet, nomor, atau heading. "
+    "Gunakan HTML Telegram hanya jika memang diperlukan."
 )
 
 
@@ -77,21 +41,14 @@ SYSTEM_PROMPT_USER = (
 # =========================================================
 
 MAX_HISTORY = 20
-
-# Interval edit streaming.
 EDIT_INTERVAL = 0.3
-
-# Batas tampilan satu pesan.
 STREAM_DISPLAY_LIMIT = 4000
-
-# Timeout request.
 STREAM_TIMEOUT = 120
 
-# Trigger.
 TRIGGER = "xkiro"
-
-# Stop.
 STOP_TRIGGER = "stop"
+
+DELETE_DELAY = 1.0
 
 
 # =========================================================
@@ -102,7 +59,7 @@ MEMORY = {}
 
 
 # =========================================================
-# ACTIVE CHAT
+# ACTIVE CHATS
 # =========================================================
 
 ACTIVE_CHATS = {}
@@ -142,11 +99,6 @@ ALLOWED_TAGS = (
 # =========================================================
 
 def sanitize_telegram_html(text):
-    """
-    Mempertahankan HTML Telegram yang diperbolehkan
-    dan meng-escape HTML lainnya.
-    """
-
     if not text:
         return ""
 
@@ -154,9 +106,7 @@ def sanitize_telegram_html(text):
 
     def protect_tag(match):
         key = f"TGPLACEHOLDER{len(placeholders)}X"
-
         placeholders[key] = match.group(0)
-
         return key
 
     tag_pattern = re.compile(
@@ -180,7 +130,6 @@ def sanitize_telegram_html(text):
     )
 
     for key, tag in placeholders.items():
-
         protected = protected.replace(
             html.escape(
                 key,
@@ -205,9 +154,8 @@ def format_telegram(text):
 # =========================================================
 
 def strip_html_tags(text):
-    """
-    Fallback jika Telegram menolak HTML.
-    """
+    if not text:
+        return ""
 
     return re.sub(
         r"<[^>]+>",
@@ -224,24 +172,22 @@ async def safe_reply(
     message,
     text,
 ):
-    """
-    Kirim message menggunakan Telegram HTML.
-    """
-
     formatted = format_telegram(text)
 
     try:
-
         return await message.reply_text(
             formatted,
             parse_mode=ParseMode.HTML,
         )
 
     except Exception:
+        try:
+            return await message.reply_text(
+                strip_html_tags(text)
+            )
 
-        return await message.reply_text(
-            strip_html_tags(text)
-        )
+        except Exception:
+            return None
 
 
 # =========================================================
@@ -252,15 +198,12 @@ async def safe_edit(
     message,
     text,
 ):
-    """
-    Edit message dengan HTML.
-    Jika gagal, fallback ke plain text.
-    """
+    if message is None:
+        return False
 
     formatted = format_telegram(text)
 
     try:
-
         await message.edit_text(
             formatted,
             parse_mode=ParseMode.HTML,
@@ -269,9 +212,7 @@ async def safe_edit(
         return True
 
     except Exception:
-
         try:
-
             await message.edit_text(
                 strip_html_tags(text)
             )
@@ -279,8 +220,61 @@ async def safe_edit(
             return True
 
         except Exception:
-
             return False
+
+
+# =========================================================
+# SAFE DELETE
+# =========================================================
+
+async def safe_delete(message):
+    if message is None:
+        return
+
+    try:
+        await message.delete()
+
+    except Exception:
+        pass
+
+
+# =========================================================
+# DELETE GENERATED MESSAGES
+# =========================================================
+
+async def delete_generated_messages(
+    messages,
+):
+    if not messages:
+        return
+
+    await asyncio.sleep(
+        DELETE_DELAY
+    )
+
+    for generated_message in messages:
+        await safe_delete(
+            generated_message
+        )
+
+
+# =========================================================
+# DELETE ONE GENERATED MESSAGE
+# =========================================================
+
+async def delete_one_generated_message(
+    message,
+):
+    if message is None:
+        return
+
+    await asyncio.sleep(
+        DELETE_DELAY
+    )
+
+    await safe_delete(
+        message
+    )
 
 
 # =========================================================
@@ -311,23 +305,10 @@ def get_history(
     )
 
     if memory_key not in MEMORY:
-
-        if user_id == OWNER_ID:
-
-            system_prompt = (
-                SYSTEM_PROMPT_OWNER
-            )
-
-        else:
-
-            system_prompt = (
-                SYSTEM_PROMPT_USER
-            )
-
         MEMORY[memory_key] = [
             {
                 "role": "system",
-                "content": system_prompt,
+                "content": SYSTEM_PROMPT_OWNER,
             }
         ]
 
@@ -353,7 +334,6 @@ def trim_history(
     )
 
     if len(history) > MAX_HISTORY + 1:
-
         MEMORY[memory_key] = [
             history[0],
             *history[-MAX_HISTORY:],
@@ -385,10 +365,7 @@ def get_lock(
     )
 
     if lock_key not in LOCKS:
-
-        LOCKS[lock_key] = (
-            asyncio.Lock()
-        )
+        LOCKS[lock_key] = asyncio.Lock()
 
     return LOCKS[lock_key]
 
@@ -398,33 +375,16 @@ def get_lock(
 # =========================================================
 
 def decode_sse_line(raw_line):
-    """
-    Decode response SSE sebagai UTF-8.
-
-    Memperbaiki kasus seperti:
-
-        🤙
-        👊
-        😂
-        —
-        ™
-
-    yang berubah menjadi mojibake.
-    """
-
     if isinstance(
         raw_line,
         bytes,
     ):
-
         try:
-
             return raw_line.decode(
                 "utf-8"
             )
 
         except UnicodeDecodeError:
-
             return raw_line.decode(
                 "utf-8",
                 errors="replace",
@@ -438,10 +398,6 @@ def decode_sse_line(raw_line):
 # =========================================================
 
 def create_stream(messages):
-    """
-    Request streaming ke Xkiro API.
-    """
-
     return requests.post(
         f"{XKIRO_BASE_URL.rstrip('/')}/chat/completions",
 
@@ -449,9 +405,11 @@ def create_stream(messages):
             "Authorization": (
                 f"Bearer {XKIRO_API_KEY}"
             ),
+
             "Content-Type": (
                 "application/json"
             ),
+
             "Accept": (
                 "text/event-stream"
             ),
@@ -459,9 +417,13 @@ def create_stream(messages):
 
         json={
             "model": XKIRO_MODEL,
+
             "messages": messages,
+
             "temperature": 1,
+
             "max_tokens": 2048,
+
             "stream": True,
         },
 
@@ -469,39 +431,6 @@ def create_stream(messages):
 
         timeout=STREAM_TIMEOUT,
     )
-
-
-# =========================================================
-# NON OWNER RESPONSE FILTER
-# =========================================================
-
-def clean_non_owner_response(
-    text,
-    user_id,
-):
-    """
-    Member biasa tidak boleh mendapatkan
-    penyebutan zp.
-    """
-
-    if user_id == OWNER_ID:
-        return text
-
-    replacements = {
-        "zp": "[pemilik]",
-        "ZP": "[pemilik]",
-        "Zp": "[pemilik]",
-        "zP": "[pemilik]",
-    }
-
-    for old, new in replacements.items():
-
-        text = text.replace(
-            old,
-            new,
-        )
-
-    return text
 
 
 # =========================================================
@@ -516,7 +445,6 @@ def remove_last_user_message(
         and history[-1].get("role")
         == "user"
     ):
-
         history.pop()
 
 
@@ -533,6 +461,21 @@ async def assistant_ai_handler(
     client,
     message,
 ):
+    # =====================================================
+    # USER CHECK
+    # =====================================================
+
+    if not message.from_user:
+        return
+
+    user_id = message.from_user.id
+
+    # =====================================================
+    # OWNER ONLY
+    # =====================================================
+
+    if user_id != OWNER_ID:
+        return
 
     # =====================================================
     # MESSAGE
@@ -545,17 +488,6 @@ async def assistant_ai_handler(
 
     if not text:
         return
-
-    # =====================================================
-    # USER
-    # =====================================================
-
-    if not message.from_user:
-        return
-
-    user_id = (
-        message.from_user.id
-    )
 
     # =====================================================
     # CHAT
@@ -575,24 +507,29 @@ async def assistant_ai_handler(
 
     if text_lower == STOP_TRIGGER:
 
-        if user_id != OWNER_ID:
-
-            return await safe_reply(
-                message,
-                (
-                    "🚫 <b>Lu siapa jir?</b>\n"
-                    "Cuma owner yang bisa matiin Xkiro."
-                ),
-            )
-
         ACTIVE_CHATS[
             chat_id
         ] = False
 
-        return await safe_reply(
+        generated_message = await safe_reply(
             message,
             "🔴 <b>Assistant dimatiin jir.</b>",
         )
+
+        # Hapus pesan owner juga
+        await safe_delete(
+            message
+        )
+
+        # Hapus response bot
+        if generated_message:
+            asyncio.create_task(
+                delete_one_generated_message(
+                    generated_message
+                )
+            )
+
+        return
 
     # =====================================================
     # CLEAR
@@ -603,19 +540,9 @@ async def assistant_ai_handler(
         "/clear",
     }:
 
-        if user_id != OWNER_ID:
-
-            return await safe_reply(
-                message,
-                (
-                    "🚫 <b>Memory jangan lu obrak-abrik jir.</b>\n"
-                    "Cuma owner yang bisa clear."
-                ),
-            )
-
         memory_key = get_memory_key(
             chat_id,
-            user_id,
+            OWNER_ID,
         )
 
         MEMORY.pop(
@@ -623,10 +550,25 @@ async def assistant_ai_handler(
             None,
         )
 
-        return await safe_reply(
+        generated_message = await safe_reply(
             message,
             "🧹 <b>Memory lu udah di-clear jir.</b>",
         )
+
+        # Hapus command owner
+        await safe_delete(
+            message
+        )
+
+        # Hapus response bot
+        if generated_message:
+            asyncio.create_task(
+                delete_one_generated_message(
+                    generated_message
+                )
+            )
+
+        return
 
     # =====================================================
     # CHECK ACTIVE
@@ -634,7 +576,6 @@ async def assistant_ai_handler(
 
     if not is_active(chat_id):
 
-        # Hanya trigger xkiro yang mengaktifkan.
         if not text_lower.startswith(
             TRIGGER
         ):
@@ -661,7 +602,7 @@ async def assistant_ai_handler(
 
     if not prompt:
 
-        return await safe_reply(
+        generated_message = await safe_reply(
             message,
             (
                 "🟢 <b>Assistant aktif jir.</b>\n"
@@ -670,16 +611,42 @@ async def assistant_ai_handler(
             ),
         )
 
+        await safe_delete(
+            message
+        )
+
+        if generated_message:
+            asyncio.create_task(
+                delete_one_generated_message(
+                    generated_message
+                )
+            )
+
+        return
+
     # =====================================================
     # API KEY
     # =====================================================
 
     if not XKIRO_API_KEY:
 
-        return await safe_reply(
+        generated_message = await safe_reply(
             message,
             "❌ <b>XKIRO_API_KEY belum diatur.</b>",
         )
+
+        await safe_delete(
+            message
+        )
+
+        if generated_message:
+            asyncio.create_task(
+                delete_one_generated_message(
+                    generated_message
+                )
+            )
+
+        return
 
     # =====================================================
     # LOCK
@@ -687,18 +654,35 @@ async def assistant_ai_handler(
 
     lock = get_lock(
         chat_id,
-        user_id,
+        OWNER_ID,
     )
 
     if lock.locked():
 
-        return await safe_reply(
+        generated_message = await safe_reply(
             message,
             (
                 "⏳ <i>Sabar napa jir, "
                 "gue masih mikir yang tadi.</i>"
             ),
         )
+
+        await safe_delete(
+            message
+        )
+
+        if generated_message:
+            asyncio.create_task(
+                delete_one_generated_message(
+                    generated_message
+                )
+            )
+
+        return
+
+    # =====================================================
+    # LOCK START
+    # =====================================================
 
     async with lock:
 
@@ -708,7 +692,7 @@ async def assistant_ai_handler(
 
         history = get_history(
             chat_id,
-            user_id,
+            OWNER_ID,
         )
 
         # =================================================
@@ -728,21 +712,49 @@ async def assistant_ai_handler(
 
         trim_history(
             chat_id,
-            user_id,
+            OWNER_ID,
         )
 
         history = get_history(
             chat_id,
-            user_id,
+            OWNER_ID,
         )
 
         # =================================================
-        # PROGRESS MESSAGE
+        # GENERATED MESSAGES
         # =================================================
 
-        reply_msg = await message.reply_text(
-            "💭 <i>Berfikir...</i>",
-            parse_mode=ParseMode.HTML,
+        generated_messages = []
+
+        # =================================================
+        # THINKING MESSAGE
+        # =================================================
+
+        try:
+
+            reply_msg = await message.reply_text(
+                "💭 <i>Berfikir...</i>",
+                parse_mode=ParseMode.HTML,
+            )
+
+            generated_messages.append(
+                reply_msg
+            )
+
+        except Exception:
+
+            remove_last_user_message(
+                history
+            )
+
+            return
+
+        # =================================================
+        # DELETE USER MESSAGE
+        # =================================================
+
+        await safe_delete(
+            message
         )
 
         # =================================================
@@ -755,11 +767,11 @@ async def assistant_ai_handler(
 
         last_edit_time = time.monotonic()
 
-        try:
+        # =================================================
+        # REQUEST
+        # =================================================
 
-            # =============================================
-            # CREATE STREAM
-            # =============================================
+        try:
 
             response = await asyncio.to_thread(
                 create_stream,
@@ -783,37 +795,38 @@ async def assistant_ai_handler(
                 )
 
                 try:
-
                     error_body = (
                         response.text[:500]
                     )
 
                 except Exception:
-
                     error_body = ""
 
                 if error_body:
 
-                    return await safe_edit(
-                        reply_msg,
-                        (
-                            "❌ <b>Xkiro API Error</b>\n"
-                            f"Status: "
-                            f"<code>{response.status_code}</code>\n"
-                            f"<code>"
-                            f"{html.escape(error_body)}"
-                            f"</code>"
-                        ),
+                    error_message = (
+                        "❌ <b>Xkiro API Error</b>\n"
+                        f"Status: "
+                        f"<code>{response.status_code}</code>\n"
+                        f"<code>"
+                        f"{html.escape(error_body)}"
+                        f"</code>"
                     )
 
-                return await safe_edit(
-                    reply_msg,
-                    (
+                else:
+
+                    error_message = (
                         "❌ <b>Xkiro API Error</b>\n"
                         f"Status: "
                         f"<code>{response.status_code}</code>"
-                    ),
+                    )
+
+                await safe_edit(
+                    reply_msg,
+                    error_message,
                 )
+
+                return
 
             # =============================================
             # STREAM LOOP
@@ -823,9 +836,9 @@ async def assistant_ai_handler(
                 decode_unicode=False
             ):
 
-                # -----------------------------------------
+                # =========================================
                 # STOP CHECK
-                # -----------------------------------------
+                # =========================================
 
                 if not is_active(chat_id):
 
@@ -838,16 +851,16 @@ async def assistant_ai_handler(
 
                     break
 
-                # -----------------------------------------
+                # =========================================
                 # EMPTY LINE
-                # -----------------------------------------
+                # =========================================
 
                 if not raw_line:
                     continue
 
-                # -----------------------------------------
-                # UTF-8
-                # -----------------------------------------
+                # =========================================
+                # DECODE UTF-8
+                # =========================================
 
                 line = decode_sse_line(
                     raw_line
@@ -856,9 +869,9 @@ async def assistant_ai_handler(
                 if not line:
                     continue
 
-                # -----------------------------------------
+                # =========================================
                 # SSE DATA
-                # -----------------------------------------
+                # =========================================
 
                 if not line.startswith(
                     "data:"
@@ -869,16 +882,16 @@ async def assistant_ai_handler(
                     5:
                 ].strip()
 
-                # -----------------------------------------
+                # =========================================
                 # DONE
-                # -----------------------------------------
+                # =========================================
 
                 if data_str == "[DONE]":
                     break
 
-                # -----------------------------------------
+                # =========================================
                 # JSON
-                # -----------------------------------------
+                # =========================================
 
                 try:
 
@@ -887,12 +900,11 @@ async def assistant_ai_handler(
                     )
 
                 except json.JSONDecodeError:
-
                     continue
 
-                # -----------------------------------------
+                # =========================================
                 # CHOICES
-                # -----------------------------------------
+                # =========================================
 
                 choices = (
                     data_json.get(
@@ -904,9 +916,9 @@ async def assistant_ai_handler(
                 if not choices:
                     continue
 
-                # -----------------------------------------
+                # =========================================
                 # DELTA
-                # -----------------------------------------
+                # =========================================
 
                 delta = (
                     choices[0].get(
@@ -915,10 +927,6 @@ async def assistant_ai_handler(
                     or {}
                 )
 
-                # -----------------------------------------
-                # CONTENT
-                # -----------------------------------------
-
                 chunk = delta.get(
                     "content"
                 )
@@ -926,15 +934,15 @@ async def assistant_ai_handler(
                 if not chunk:
                     continue
 
-                # -----------------------------------------
+                # =========================================
                 # APPEND
-                # -----------------------------------------
+                # =========================================
 
                 full_response += chunk
 
-                # -----------------------------------------
-                # MAX DISPLAY
-                # -----------------------------------------
+                # =========================================
+                # DISPLAY LIMIT
+                # =========================================
 
                 if len(full_response) > (
                     STREAM_DISPLAY_LIMIT
@@ -953,13 +961,11 @@ async def assistant_ai_handler(
 
                     break
 
-                # -----------------------------------------
-                # LIVE EDIT
-                # -----------------------------------------
+                # =========================================
+                # EDIT
+                # =========================================
 
-                current_time = (
-                    time.monotonic()
-                )
+                current_time = time.monotonic()
 
                 if (
                     current_time
@@ -967,16 +973,9 @@ async def assistant_ai_handler(
                     >= EDIT_INTERVAL
                 ):
 
-                    display_response = (
-                        clean_non_owner_response(
-                            full_response,
-                            user_id,
-                        )
-                    )
-
                     await safe_edit(
                         reply_msg,
-                        display_response,
+                        full_response,
                     )
 
                     last_edit_time = (
@@ -993,21 +992,12 @@ async def assistant_ai_handler(
                     history
                 )
 
-                return await safe_edit(
+                await safe_edit(
                     reply_msg,
                     "❌ <b>AI tidak memberikan response.</b>",
                 )
 
-            # =================================================
-            # FINAL CLEAN
-            # =================================================
-
-            final_response = (
-                clean_non_owner_response(
-                    full_response,
-                    user_id,
-                )
-            )
+                return
 
             # =================================================
             # SAVE MEMORY
@@ -1016,23 +1006,21 @@ async def assistant_ai_handler(
             history.append(
                 {
                     "role": "assistant",
-                    "content": final_response,
+                    "content": full_response,
                 }
             )
 
             trim_history(
                 chat_id,
-                user_id,
+                OWNER_ID,
             )
 
             # =================================================
-            # FINAL HTML
+            # FORMAT
             # =================================================
 
-            formatted_response = (
-                format_telegram(
-                    final_response
-                )
+            formatted_response = format_telegram(
+                full_response
             )
 
             # =================================================
@@ -1043,23 +1031,19 @@ async def assistant_ai_handler(
                 formatted_response
             ) <= STREAM_DISPLAY_LIMIT:
 
-                return await safe_edit(
+                await safe_edit(
                     reply_msg,
-                    final_response,
+                    full_response,
                 )
+
+                return
 
             # =================================================
             # LONG RESPONSE
             # =================================================
 
-            # HTML tidak boleh dipotong sembarangan karena
-            # bisa memotong tag <b>, <code>, <pre>, dll.
-            #
-            # Jadi untuk response terlalu panjang,
-            # fallback ke plain text chunks.
-
             plain_text = strip_html_tags(
-                final_response
+                full_response
             )
 
             first_chunk = plain_text[
@@ -1073,11 +1057,10 @@ async def assistant_ai_handler(
                 )
 
             except Exception:
-
                 pass
 
             # =================================================
-            # REMAINING CHUNKS
+            # EXTRA CHUNKS
             # =================================================
 
             for i in range(
@@ -1092,12 +1075,17 @@ async def assistant_ai_handler(
 
                 try:
 
-                    await message.reply_text(
-                        chunk
+                    extra_message = (
+                        await message.reply_text(
+                            chunk
+                        )
+                    )
+
+                    generated_messages.append(
+                        extra_message
                     )
 
                 except Exception:
-
                     pass
 
                 await asyncio.sleep(
@@ -1160,7 +1148,7 @@ async def assistant_ai_handler(
             )
 
         # =====================================================
-        # CLOSE RESPONSE
+        # CLEANUP
         # =====================================================
 
         finally:
@@ -1168,9 +1156,11 @@ async def assistant_ai_handler(
             if response is not None:
 
                 try:
-
                     response.close()
 
                 except Exception:
-
                     pass
+
+            await delete_generated_messages(
+                generated_messages
+            )
