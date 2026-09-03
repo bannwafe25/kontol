@@ -185,27 +185,24 @@ async def xkiro_cmd(client, message):
                     + "\n\n…"
                 )
 
-            await proses.edit(
-                f"{em.sukses}\n\n"
-                f"<b>Question:</b>\n"
-                f"<blockquote>"
-                f"{html.escape(prompt)}"
-                f"</blockquote>\n\n"
-                f"<b>Answer:</b>\n"
-                f"<blockquote>"
-                f"{display}"
-                f"</blockquote>\n\n"
-                f"<i>Type <code>.stop</code> "
-                f"to end the conversation.</i>",
-                parse_mode=ParseMode.HTML,
-            )
+            try:
+                await proses.edit(
+                    f"{em.sukses}\n\n"
+                    f"<b>Question:</b>\n"
+                    f"<blockquote>"
+                    f"{html.escape(prompt)}"
+                    f"</blockquote>\n\n"
+                    f"<b>Answer:</b>\n"
+                    f"<blockquote>"
+                    f"{display}"
+                    f"</blockquote>",
+                    parse_mode=ParseMode.HTML,
+                )
+            except Exception:
+                pass
 
             next_message = await client.ask(
                 chat_id,
-                f"<b><u>Chat with Xkiro</u></b>\n\n"
-                f"<i>Send your next message...</i>\n\n"
-                f"<i>Type <code>.stop</code> "
-                f"to end the conversation.</i>",
                 timeout=CONVERSATION_TIMEOUT,
             )
 
@@ -223,8 +220,7 @@ async def xkiro_cmd(client, message):
                 "stopped ask",
             ):
                 await next_message.reply(
-                    f"{em.sukses} "
-                    f"<b>Conversation ended.</b>",
+                    f"{em.sukses} <b>Conversation ended.</b>",
                     parse_mode=ParseMode.HTML,
                 )
                 break
@@ -246,8 +242,7 @@ async def xkiro_cmd(client, message):
         except asyncio.TimeoutError:
             try:
                 await proses.edit(
-                    f"{em.gagal} "
-                    f"<b>Conversation timeout.</b>",
+                    f"{em.gagal} <b>Conversation timeout.</b>",
                     parse_mode=ParseMode.HTML,
                 )
             except Exception:
@@ -257,8 +252,7 @@ async def xkiro_cmd(client, message):
         except requests.exceptions.Timeout:
             try:
                 await proses.edit(
-                    f"{em.gagal} "
-                    f"<b>Request timeout.</b>",
+                    f"{em.gagal} <b>Request timeout.</b>",
                     parse_mode=ParseMode.HTML,
                 )
             except Exception:
