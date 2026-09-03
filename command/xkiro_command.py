@@ -1,6 +1,7 @@
 import asyncio
 import html
 import json
+import re
 import time
 import traceback
 
@@ -18,7 +19,9 @@ CONVERSATION_TIMEOUT = 300
 
 SYSTEM_PROMPT = (
     "Kamu adalah assistant AI dengan gaya bahasa tongkrongan toxic "
-    "dan mudah dipahami."
+    "dan mudah dipahami. "
+    "Gunakan bahasa Indonesia santai dan natural. "
+    "Gunakan Markdown sederhana jika perlu."
 )
 
 
@@ -40,6 +43,118 @@ def create_stream(history):
         stream=True,
         timeout=120,
     )
+
+
+def markdown_to_telegram(text):
+    """Convert Markdown sederhana ke Telegram HTML."""
+
+    if not text:
+        return ""
+
+    # Perbaiki UTF-8 mojibake jika terjadi.
+    try:
+        if "Ã" in text or "ð" in text or "â" in text:
+            fixed = text.encode("latin1").decode("utf-8")
+            text = fixed
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        pass
+
+    # Escape HTML terlebih dahulu.
+    text = html.escape(text, quote=False)
+
+    # Code block
+    text = re.sub(
+        r"```(?:\w+)?\n?(.*?)```",
+        lambda m: f"<pre>{m.group(1).strip()}</pre>",
+        text,
+        flags=re.DOTALL,
+    )
+
+    # Inline code
+    text = re.sub(
+        r"`([^`\n]+)`",
+        r"<code>\1</code>",
+        text,
+    )
+
+    # Bold
+    text = re.sub(
+        r"\*\*(.+?)\*\*",
+        r"<b>\1</b>",
+        text,
+        flags=re.DOTALL,
+    )
+
+    text = re.sub(
+        r"__(.+?)__",
+        r"<b>\1</b>",
+        text,
+        flags=re.DOTALL,
+    )
+
+    # Italic
+    text = re.sub(
+        r"(?<!\*)\*([^*\n]+)\*(?!\*)",
+        r"<i>\1</i>",
+    )
+
+    # Strikethrough
+    text = re.sub(
+        r"~~(.+?)~~",
+        r"<s>\1</s>",
+        text,
+        flags=re.DOTALL,
+    )
+
+    # Markdown heading
+    text = re.sub(
+        r"(?m)^#{1,6}\s+(.+)$",
+        r"<b>\1</b>",
+        text,
+    )
+
+    # Horizontal separator
+    text = re.sub(
+        r"(?m)^\s*([-*_])(?:\s*\1){2,}\s*$",
+        "",
+        text,
+    )
+
+    # Bullet list
+    text = re.sub(
+        r"(?m)^\s*[-*+]\s+",
+        "• ",
+        text,
+    )
+
+    # Numbered list tetap rapi
+    text = re.sub(
+        r"(?m)^\s*(\d+)[.)]\s+",
+        r"\1. ",
+        text,
+    )
+
+    return text.strip()
+
+
+def format_answer(prompt, answer, em):
+    question = html.escape(prompt, quote=False)
+    answer = markdown_to_telegram(answer)
+
+    return (
+        f"{em.sukses}\n\n"
+        f"<b>Question:</b>\n"
+        f"<blockquote>{question}</blockquote>\n\n"
+        f"<b>Answer:</b>\n"
+        f"<blockquote>{answer}</blockquote>"
+    )
+
+
+def limit_message(text):
+    if len(text) <= MAX_MESSAGE_LENGTH:
+        return text
+
+    return text[:MAX_MESSAGE_LENGTH - 20] + "\n\n…"
 
 
 async def xkiro_cmd(client, message):
@@ -94,11 +209,13 @@ async def xkiro_cmd(client, message):
 
             if response.status_code != 200:
                 error = html.escape(
-                    response.text[:2000]
+                    response.text[:2000],
+                    quote=False,
                 )
 
                 await proses.edit(
-                    f"{em.gagal} <b>Xkiro API Error "
+                    f"{em.gagal} "
+                    f"<b>Xkiro API Error "
                     f"({response.status_code})</b>\n\n"
                     f"<code>{error}</code>",
                     parse_mode=ParseMode.HTML,
@@ -108,67 +225,65 @@ async def xkiro_cmd(client, message):
             result = ""
             last_edit = time.monotonic()
 
+            # Paksa decode UTF-8.
+            response.encoding = "utf-8"
+
             for line in response.iter_lines(
                 decode_unicode=True
             ):
-                if not line or not line.startswith("data: "):
+                if not line:
                     continue
 
-                data = line[6:]
+                if not line.startswith("data:"):
+                    continue
+
+                data = line[5:].strip()
 
                 if data == "[DONE]":
                     break
 
                 try:
                     chunk = json.loads(data)
-                    choices = chunk.get("choices", [])
-
-                    if not choices:
-                        continue
-
-                    content = choices[0].get(
-                        "delta", {}
-                    ).get("content", "")
-
-                    if not content:
-                        continue
-
-                    result += content
-
-                    if (
-                        time.monotonic() - last_edit
-                        >= EDIT_INTERVAL
-                    ):
-                        display = html.escape(result)
-
-                        if len(display) > MAX_MESSAGE_LENGTH:
-                            display = (
-                                display[
-                                    :MAX_MESSAGE_LENGTH - 20
-                                ]
-                                + "\n\n…"
-                            )
-
-                        try:
-                            await proses.edit(
-                                f"{em.sukses}\n\n"
-                                f"<b>Question:</b>\n"
-                                f"<blockquote>"
-                                f"{html.escape(prompt)}"
-                                f"</blockquote>\n\n"
-                                f"<b>Answer:</b>\n"
-                                f"<blockquote>"
-                                f"{display}"
-                                f"</blockquote>",
-                                parse_mode=ParseMode.HTML,
-                            )
-                        except Exception:
-                            pass
-
-                        last_edit = time.monotonic()
-
                 except json.JSONDecodeError:
                     continue
+
+                choices = chunk.get("choices", [])
+
+                if not choices:
+                    continue
+
+                content = (
+                    choices[0]
+                    .get("delta", {})
+                    .get("content", "")
+                )
+
+                if not content:
+                    continue
+
+                result += content
+
+                if (
+                    time.monotonic() - last_edit
+                    >= EDIT_INTERVAL
+                ):
+                    display = limit_message(
+                        markdown_to_telegram(result)
+                    )
+
+                    try:
+                        await proses.edit(
+                            format_answer(
+                                prompt,
+                                display,
+                                em,
+                            ),
+                            parse_mode=ParseMode.HTML,
+                        )
+                    except Exception:
+                        pass
+
+                    last_edit = time.monotonic()
 
             if not result:
                 result = "AI tidak memberikan respons."
@@ -178,31 +293,23 @@ async def xkiro_cmd(client, message):
                 "content": result,
             })
 
-            display = html.escape(result)
-
-            if len(display) > MAX_MESSAGE_LENGTH:
-                display = (
-                    display[:MAX_MESSAGE_LENGTH - 20]
-                    + "\n\n…"
-                )
+            display = limit_message(
+                markdown_to_telegram(result)
+            )
 
             try:
                 await proses.edit(
-                    f"{em.sukses}\n\n"
-                    f"<b>Question:</b>\n"
-                    f"<blockquote>"
-                    f"{html.escape(prompt)}"
-                    f"</blockquote>\n\n"
-                    f"<b>Answer:</b>\n"
-                    f"<blockquote>"
-                    f"{display}"
-                    f"</blockquote>",
+                    format_answer(
+                        prompt,
+                        display,
+                        em,
+                    ),
                     parse_mode=ParseMode.HTML,
                 )
             except Exception:
                 pass
 
-            # Tunggu pesan berikutnya tanpa menampilkan prompt.
+            # Tunggu pesan berikutnya tanpa prompt terlihat.
             next_message = await client.ask(
                 chat_id,
                 "",
@@ -226,14 +333,16 @@ async def xkiro_cmd(client, message):
                 "stopped ask",
             ):
                 await next_message.reply(
-                    f"{em.sukses} <b>Conversation ended.</b>",
+                    f"{em.sukses} "
+                    f"<b>Conversation ended.</b>",
                     parse_mode=ParseMode.HTML,
                 )
                 break
 
             if len(next_prompt) > MAX_PROMPT_LENGTH:
                 await next_message.reply(
-                    f"{em.gagal} <b>Prompt terlalu panjang.</b>",
+                    f"{em.gagal} "
+                    f"<b>Prompt terlalu panjang.</b>",
                     parse_mode=ParseMode.HTML,
                 )
                 continue
@@ -248,7 +357,8 @@ async def xkiro_cmd(client, message):
         except asyncio.TimeoutError:
             try:
                 await proses.edit(
-                    f"{em.gagal} <b>Conversation timeout.</b>",
+                    f"{em.gagal} "
+                    f"<b>Conversation timeout.</b>",
                     parse_mode=ParseMode.HTML,
                 )
             except Exception:
@@ -258,7 +368,8 @@ async def xkiro_cmd(client, message):
         except requests.exceptions.Timeout:
             try:
                 await proses.edit(
-                    f"{em.gagal} <b>Request timeout.</b>",
+                    f"{em.gagal} "
+                    f"<b>Request timeout.</b>",
                     parse_mode=ParseMode.HTML,
                 )
             except Exception:
