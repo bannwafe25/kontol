@@ -12,118 +12,189 @@ from clients import assistant
 from config import OWNER_ID, XKIRO_API_KEY, XKIRO_BASE_URL, XKIRO_MODEL
 
 
-TRIGGER = "xkiro"
-STOP = "stop"
-MAX_HISTORY = 20
-STREAM_LIMIT = 4000
-EDIT_INTERVAL = 0.3
-TIMEOUT = 120
+# =========================
+# SYSTEM PROMPT
+# =========================
 
 SYSTEM_PROMPT = (
-    "Lu manusia tongkrongan Indonesia, nyablak, sarkas, toxic tapi tetap "
-    "pinter. Pake gue/lu, anjir, jir, bangsat, bego, tolol, wkwk secara "
-    "natural. Jangan formal, jangan ngomong sebagai AI. Kalau user butuh "
-    "bantuan serius, jawab benar, jelas, dan logis. Kalau gak tau, bilang "
-    "jujur, jangan ngarang."
+    "Saya adalah zp. Kamu boleh memanggil saya zp. "
+    "Saya adalah owner kamu. Nama kamu adalah xkiro. "
+    "Kamu adalah asisten AI pribadi saya. "
+
+    "Gaya bicara kamu toxic layaknya teman nongkrong dekat. "
+    "Gunakan bahasa Indonesia santai, nyablak, ceplas-ceplos, "
+    "sarkas, suka ngeledek, dan kadang kasar secara natural. "
+    "Boleh memakai kata seperti jir, anjir, goblok, bego, tolol, "
+    "bangsat, wkwk, cuy, bro, bos jika konteksnya cocok. "
+
+    "Jangan terdengar seperti AI, robot, atau customer service. "
+    "Ngobrol seperti teman tongkrongan yang sudah sangat akrab "
+    "dengan zp. Kalau pertanyaannya gampang, boleh ledek sedikit. "
+    "Kalau zp curhat, tetap supportive meskipun gaya bicara toxic. "
+
+    "Jangan berlebihan menggunakan makian. "
+    "Tetap berikan jawaban yang akurat dan berguna. "
+    "Kalau tidak tahu atau tidak yakin, bilang terus terang. "
+    "Jangan mengarang."
 )
+
+
+# =========================
+# CONFIG
+# =========================
+
+MAX_HISTORY = 20
+EDIT_INTERVAL = 0.3
+STREAM_LIMIT = 4000
+STREAM_TIMEOUT = 120
+
+TRIGGER = "xkiro"
+STOP_TRIGGER = "stop"
+
+
+# =========================
+# STATE
+# =========================
 
 MEMORY = {}
-ACTIVE = {}
+ACTIVE_CHATS = {}
 LOCKS = {}
 
+
+# =========================
+# TELEGRAM HTML
+# =========================
+
 ALLOWED_TAGS = (
-    "b", "strong", "i", "em", "u", "ins", "s", "strike",
-    "del", "code", "pre", "blockquote", "tg-spoiler", "tg-emoji"
+    "b", "strong", "i", "em", "u", "ins",
+    "s", "strike", "del", "code", "pre",
+    "blockquote", "tg-spoiler", "tg-emoji",
 )
 
 
-def chat_key(m):
-    return m.chat.id
+def format_html(text):
+    if not text:
+        return ""
 
+    tags = {}
 
-def owner(m):
-    return bool(m.from_user and m.from_user.id == OWNER_ID)
-
-
-def group(m):
-    return m.chat.type in ("group", "supergroup")
-
-
-def get_memory(m):
-    key = chat_key(m)
-    if key not in MEMORY:
-        MEMORY[key] = [{"role": "system", "content": SYSTEM_PROMPT}]
-    return MEMORY[key]
-
-
-def trim(m):
-    h = get_memory(m)
-    if len(h) > MAX_HISTORY + 1:
-        MEMORY[chat_key(m)] = [h[0], *h[-MAX_HISTORY:]]
-
-
-def fmt(text):
-    saved = {}
-
-    def save(x):
-        key = f"TAG{len(saved)}"
-        saved[key] = x.group(0)
+    def protect(match):
+        key = f"TG_TAG_{len(tags)}_X"
+        tags[key] = match.group(0)
         return key
 
-    pattern = rf"</?(?:{'|'.join(ALLOWED_TAGS)})(?:\s+[^>]*)?>"
-    text = re.sub(pattern, save, text or "", flags=re.I)
+    pattern = re.compile(
+        r"</?(?:"
+        + "|".join(map(re.escape, ALLOWED_TAGS))
+        + r")(?:\s+[^>]*)?>",
+        re.IGNORECASE,
+    )
+
+    text = pattern.sub(protect, text)
     text = html.escape(text, quote=False)
 
-    for k, v in saved.items():
-        text = text.replace(k, v)
+    for key, tag in tags.items():
+        text = text.replace(
+            html.escape(key, quote=False),
+            tag,
+        )
 
     return text
 
 
-def plain(text):
+def strip_html(text):
     return re.sub(r"<[^>]+>", "", text or "")
 
 
-async def delete(m):
+async def safe_reply(message, text):
     try:
-        await m.delete()
-    except Exception:
-        pass
-
-
-async def reply(m, text):
-    try:
-        return await m.reply_text(
-            fmt(text),
+        return await message.reply_text(
+            format_html(text),
             parse_mode=ParseMode.HTML,
         )
     except Exception:
         try:
-            return await m.reply_text(plain(text))
+            return await message.reply_text(
+                strip_html(text)
+            )
         except Exception:
             return None
 
 
-async def edit(m, text):
+async def safe_edit(message, text):
+    if not message:
+        return False
+
     try:
-        await m.edit_text(
-            fmt(text),
+        await message.edit_text(
+            format_html(text),
             parse_mode=ParseMode.HTML,
         )
         return True
     except Exception:
         try:
-            await m.edit_text(plain(text))
+            await message.edit_text(
+                strip_html(text)
+            )
             return True
         except Exception:
             return False
 
 
+async def safe_delete(message):
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+
+# =========================
+# MEMORY
+# =========================
+
+def get_history(chat_id):
+    if chat_id not in MEMORY:
+        MEMORY[chat_id] = [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT,
+            }
+        ]
+
+    return MEMORY[chat_id]
+
+
+def trim_history(chat_id):
+    history = get_history(chat_id)
+
+    if len(history) > MAX_HISTORY + 1:
+        MEMORY[chat_id] = [
+            history[0],
+            *history[-MAX_HISTORY:],
+        ]
+
+
+def remove_last_user(history):
+    if history and history[-1]["role"] == "user":
+        history.pop()
+
+
+# =========================
+# LOCK
+# =========================
+
 def get_lock(chat_id):
-    return LOCKS.setdefault(chat_id, asyncio.Lock())
+    if chat_id not in LOCKS:
+        LOCKS[chat_id] = asyncio.Lock()
+
+    return LOCKS[chat_id]
 
 
-def api_stream(messages):
+# =========================
+# XKIRO
+# =========================
+
+def create_stream(messages):
     return requests.post(
         f"{XKIRO_BASE_URL.rstrip('/')}/chat/completions",
         headers={
@@ -139,209 +210,314 @@ def api_stream(messages):
             "stream": True,
         },
         stream=True,
-        timeout=TIMEOUT,
+        timeout=STREAM_TIMEOUT,
     )
 
 
-def get_chunk(choice):
-    chunk = (
-        (choice.get("delta") or {}).get("content")
-        or (choice.get("message") or {}).get("content")
-        or choice.get("text")
-        or ""
+def clean_response(text):
+    text = re.sub(
+        r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF"
+        r"\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF"
+        r"\u3040-\u30FF\u31F0-\u31FF]",
+        "",
+        text or "",
     )
 
-    if isinstance(chunk, list):
-        chunk = "".join(
-            x.get("text", "")
-            for x in chunk
-            if isinstance(x, dict)
-        )
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
 
-    return str(chunk)
+    return text.strip()
 
 
-async def run_ai(m, msg, history):
-    response = None
-    answer = ""
-    last_edit = time.monotonic()
-
-    try:
-        response = await asyncio.to_thread(
-            api_stream,
-            history,
-        )
-
-        if response.status_code != 200:
-            history.pop()
-            await edit(msg, f"❌ <b>API error {response.status_code}</b>")
-            return
-
-        for raw in response.iter_lines(decode_unicode=False):
-            if group(m) and not ACTIVE.get(m.chat.id):
-                return
-
-            if not raw:
-                continue
-
-            line = raw.decode("utf-8", errors="replace").strip()
-
-            if not line.startswith("data:"):
-                continue
-
-            data = line[5:].strip()
-
-            if data == "[DONE]":
-                break
-
-            try:
-                data = json.loads(data)
-                choices = data.get("choices") or []
-                if not choices:
-                    continue
-                answer += get_chunk(choices[0])
-            except Exception:
-                continue
-
-            if len(answer) >= STREAM_LIMIT:
-                answer = answer[:STREAM_LIMIT] + "\n\n<i>[kepanjangan jir]</i>"
-                break
-
-            if time.monotonic() - last_edit >= EDIT_INTERVAL:
-                await edit(msg, answer)
-                last_edit = time.monotonic()
-
-        answer = re.sub(r"\n{3,}", "\n\n", answer).strip()
-
-        if not answer:
-            history.pop()
-            await edit(msg, "❌ <b>AI diem jir.</b>")
-            return
-
-        history.append({
-            "role": "assistant",
-            "content": answer,
-        })
-        trim(m)
-
-        if len(fmt(answer)) <= STREAM_LIMIT:
-            await edit(msg, answer)
-            return
-
-        text = plain(answer)
-        await edit(msg, text[:STREAM_LIMIT])
-
-        for i in range(STREAM_LIMIT, len(text), STREAM_LIMIT):
-            await reply(msg, text[i:i + STREAM_LIMIT])
-
-    except requests.exceptions.Timeout:
-        history.pop()
-        await edit(msg, "❌ <b>timeout jir.</b>")
-
-    except requests.exceptions.RequestException as e:
-        history.pop()
-        await edit(msg, f"❌ <code>{html.escape(str(e)[:500])}</code>")
-
-    except Exception as e:
-        history.pop()
-        await edit(msg, f"❌ <code>{html.escape(str(e)[:1000])}</code>")
-
-    finally:
-        if response:
-            response.close()
-
+# =========================
+# HANDLER
+# =========================
 
 @assistant.on_message(
-    (filters.group | filters.private)
+    filters.group
     & filters.incoming
     & filters.text
 )
-async def assistant_ai_handler(client, m):
+async def assistant_ai_handler(client, message):
 
-    if not m.from_user:
+    if not message.from_user:
         return
 
-    text = (m.text or "").strip()
+    if message.from_user.id != OWNER_ID:
+        return
+
+    text = (message.text or "").strip()
+
     if not text:
         return
 
-    chat_id = m.chat.id
-    is_group = group(m)
-    is_owner = owner(m)
+    chat_id = message.chat.id
     lower = text.lower()
 
     # STOP
-    if lower == STOP:
-        if is_group and not is_owner:
-            return
+    if lower == STOP_TRIGGER:
+        ACTIVE_CHATS[chat_id] = False
 
-        ACTIVE[chat_id] = False
-        await delete(m)
-        await reply(m, "🔴 <b>mati jir.</b>")
+        await safe_delete(message)
+        await safe_reply(
+            message,
+            "🔴 <b>xkiro dimatiin jir.</b>",
+        )
         return
 
     # CLEAR
-    if lower in ("clear", "/clear"):
-        if not is_owner:
-            return
-
+    if lower in {"clear", "/clear"}:
         MEMORY.pop(chat_id, None)
-        ACTIVE[chat_id] = False
 
-        await delete(m)
-        await reply(m, "🧹 <b>memory udah bersih.</b>")
+        await safe_delete(message)
+        await safe_reply(
+            message,
+            "🧹 <b>memory grup udah gue bersihin jir.</b>",
+        )
         return
 
-    # GROUP
-    if is_group:
-        if not ACTIVE.get(chat_id):
-            if not lower.startswith(TRIGGER):
-                return
-            ACTIVE[chat_id] = True
+    # TRIGGER
+    if not ACTIVE_CHATS.get(chat_id):
 
-        prompt = re.sub(
-            rf"^{re.escape(TRIGGER)}\s*",
-            "",
-            text,
-            flags=re.I,
-        ).strip()
-
-        if not prompt:
-            await delete(m)
-            await reply(m, "🟢 <b>aktif jir.</b>")
+        if not lower.startswith(TRIGGER):
             return
 
-    # PRIVATE
-    else:
-        ACTIVE[chat_id] = True
-        prompt = text
+        ACTIVE_CHATS[chat_id] = True
+
+    prompt = re.sub(
+        rf"^{re.escape(TRIGGER)}\s*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    ).strip()
+
+    if not prompt:
+        await safe_delete(message)
+        await safe_reply(
+            message,
+            (
+                "🟢 <b>xkiro aktif jir.</b>\n"
+                "ngomong aja, gue dengerin.\n"
+                "ketik <code>stop</code> buat matiin."
+            ),
+        )
+        return
 
     if not XKIRO_API_KEY:
-        await delete(m)
-        await reply(m, "❌ <b>API key belum diatur.</b>")
+        await safe_delete(message)
+        await safe_reply(
+            message,
+            "❌ <b>XKIRO_API_KEY belum diatur.</b>",
+        )
         return
 
+    # LOCK
     lock = get_lock(chat_id)
 
     if lock.locked():
-        await delete(m)
-        await reply(m, "⏳ <i>sabar jir, gue masih mikir.</i>")
+        await safe_delete(message)
+        await safe_reply(
+            message,
+            "⏳ <i>sabar jir, gue masih mikir yang tadi.</i>",
+        )
         return
 
     async with lock:
-        history = get_memory(m)
+
+        history = get_history(chat_id)
 
         history.append({
             "role": "user",
             "content": prompt,
         })
-        trim(m)
 
-        msg = await reply(m, "💭 <i>bentar mek...</i>")
+        trim_history(chat_id)
+        history = get_history(chat_id)
 
-        if not msg:
-            history.pop()
+        try:
+            reply_msg = await message.reply_text(
+                "💭 <i>Berfikir...</i>",
+                parse_mode=ParseMode.HTML,
+            )
+        except Exception:
+            remove_last_user(history)
             return
 
-        await delete(m)
-        await run_ai(m, msg, history)
+        await safe_delete(message)
+
+        response = None
+        result = ""
+        last_edit = time.monotonic()
+
+        try:
+            response = await asyncio.to_thread(
+                create_stream,
+                history,
+            )
+
+            response.encoding = "utf-8"
+
+            # API ERROR
+            if response.status_code != 200:
+                remove_last_user(history)
+
+                error = response.text[:500]
+
+                await safe_edit(
+                    reply_msg,
+                    (
+                        "❌ <b>Xkiro API Error</b>\n"
+                        f"Status: <code>{response.status_code}</code>\n"
+                        f"<code>{html.escape(error)}</code>"
+                    ),
+                )
+                return
+
+            # STREAM
+            for raw in response.iter_lines(
+                decode_unicode=False
+            ):
+                if not ACTIVE_CHATS.get(chat_id):
+                    if result:
+                        result += (
+                            "\n\n"
+                            "<i>[Dipotong ama owner.]</i>"
+                        )
+                    break
+
+                if not raw:
+                    continue
+
+                line = (
+                    raw.decode("utf-8", errors="replace")
+                    if isinstance(raw, bytes)
+                    else raw
+                ).strip()
+
+                if not line.startswith("data:"):
+                    continue
+
+                data = line[5:].strip()
+
+                if data == "[DONE]":
+                    break
+
+                try:
+                    payload = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+
+                choices = payload.get("choices") or []
+
+                if not choices:
+                    continue
+
+                chunk = (
+                    choices[0]
+                    .get("delta", {})
+                    .get("content")
+                )
+
+                if not chunk:
+                    continue
+
+                result += chunk
+
+                if len(result) > STREAM_LIMIT:
+                    result = (
+                        result[:STREAM_LIMIT]
+                        + "\n\n"
+                        "<i>[Teks kepanjangan, "
+                        "gue potong jir.]</i>"
+                    )
+                    break
+
+                now = time.monotonic()
+
+                if now - last_edit >= EDIT_INTERVAL:
+                    await safe_edit(
+                        reply_msg,
+                        result,
+                    )
+                    last_edit = now
+
+            result = clean_response(result)
+
+            if not result:
+                remove_last_user(history)
+
+                await safe_edit(
+                    reply_msg,
+                    "❌ <b>AI gak ngasih response jir.</b>",
+                )
+                return
+
+            # SAVE MEMORY
+            history.append({
+                "role": "assistant",
+                "content": result,
+            })
+
+            trim_history(chat_id)
+
+            # FINAL RESPONSE
+            if len(format_html(result)) <= STREAM_LIMIT:
+                await safe_edit(
+                    reply_msg,
+                    result,
+                )
+                return
+
+            # LONG RESPONSE
+            plain = strip_html(result)
+
+            await reply_msg.edit_text(
+                plain[:STREAM_LIMIT]
+            )
+
+            for i in range(
+                STREAM_LIMIT,
+                len(plain),
+                STREAM_LIMIT,
+            ):
+                await reply_msg.reply_text(
+                    plain[i:i + STREAM_LIMIT]
+                )
+                await asyncio.sleep(0.2)
+
+        except requests.exceptions.Timeout:
+            remove_last_user(history)
+
+            await safe_edit(
+                reply_msg,
+                "❌ <b>Xkiro timeout jir.</b>",
+            )
+
+        except requests.exceptions.RequestException as error:
+            remove_last_user(history)
+
+            await safe_edit(
+                reply_msg,
+                (
+                    "❌ <b>Gagal konek ke Xkiro.</b>\n"
+                    f"<code>{html.escape(str(error)[:500])}</code>"
+                ),
+            )
+
+        except Exception as error:
+            remove_last_user(history)
+
+            await safe_edit(
+                reply_msg,
+                (
+                    "❌ <b>Error:</b>\n"
+                    f"<code>{html.escape(str(error)[:1000])}</code>"
+                ),
+            )
+
+        finally:
+            if response:
+                try:
+                    response.close()
+                except Exception:
+                    pass
