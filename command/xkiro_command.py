@@ -135,9 +135,10 @@ async def xkiro_cmd(client, message):
 
                     result += content
 
-                    now = time.monotonic()
-
-                    if now - last_edit >= EDIT_INTERVAL:
+                    if (
+                        time.monotonic() - last_edit
+                        >= EDIT_INTERVAL
+                    ):
                         display = html.escape(result)
 
                         if len(display) > MAX_MESSAGE_LENGTH:
@@ -164,7 +165,7 @@ async def xkiro_cmd(client, message):
                         except Exception:
                             pass
 
-                        last_edit = now
+                        last_edit = time.monotonic()
 
                 except json.JSONDecodeError:
                     continue
@@ -201,8 +202,10 @@ async def xkiro_cmd(client, message):
             except Exception:
                 pass
 
+            # Tunggu pesan berikutnya tanpa menampilkan prompt.
             next_message = await client.ask(
                 chat_id,
+                "",
                 timeout=CONVERSATION_TIMEOUT,
             )
 
@@ -213,6 +216,9 @@ async def xkiro_cmd(client, message):
                 continue
 
             next_prompt = next_message.text.strip()
+
+            if not next_prompt:
+                continue
 
             if next_prompt.lower() in (
                 ".stop",
@@ -260,7 +266,7 @@ async def xkiro_cmd(client, message):
             break
 
         except requests.exceptions.RequestException:
-            logger.error(traceback.format_exc())
+            print(traceback.format_exc())
 
             try:
                 await proses.edit(
@@ -274,7 +280,7 @@ async def xkiro_cmd(client, message):
             break
 
         except Exception:
-            logger.error(traceback.format_exc())
+            print(traceback.format_exc())
 
             try:
                 await proses.edit(
