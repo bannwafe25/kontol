@@ -1,3 +1,3 @@
 from .config import * 
 import os
-KYNAN = int(os.environ.get("KYNAN", 1289196629))
+KYNAN = int(os.environ.get("OWNER_ID", 7586938131))
