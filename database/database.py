@@ -1,612 +1,697 @@
-import json
+from datetime import datetime, timezone
 import random
 import string
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
-import aioshutil
-import aiosqlite
-import pytz
+from pymongo import AsyncMongoClient
 
-from config import DB_NAME
-
-jakarta_timezone = pytz.timezone("Asia/Jakarta")
-DB_PATH = f"./{DB_NAME}.db"
-ENV_PATH = f"./.env"
-BACKUP_TIME = datetime.now(jakarta_timezone)
-BACKUP_PATH = f"./{DB_NAME}_backup_{BACKUP_TIME}.db"
+from config import MONGO_DB_URI, DB_NAME
 
 
-class DatabaseClient:
+class MongoDB:
     def __init__(self) -> None:
-        self.db_path = Path(DB_PATH)
-        self.env_path = Path(ENV_PATH)
-        self.db_backup = f"{DB_PATH}_{BACKUP_TIME}"
-        self.db_backup_format = "zip"
-        self.temp_dir = self.db_path.parent / "./output"
-        self.temp_dir.mkdir(parents=True, exist_ok=True)
-        self.conn = None
-        self.chconnect = {}
+        self.mongo = AsyncMongoClient(MONGO_DB_URI)
+        self.db = self.mongo[DB_NAME]
 
-    async def initialize(self):
-        """Initialize the database connection and tables"""
-        await self.connect()
-        await self._initialize_database()
+        self.user_prefixes = self.db.user_prefixes
+        self.floods = self.db.floods
+        self.variabel = self.db.variabel
+        self.expired = self.db.expired
+        self.userdata = self.db.userdata
+        self.ubotdb = self.db.ubotdb
+        self.tokens = self.db.tokens
+        self.states = self.db.states
 
-    async def connect(self):
-        self.conn = await aiosqlite.connect(self.db_path, check_same_thread=False)
-
-    async def _initialize_database(self):
-        script = """
-        CREATE TABLE IF NOT EXISTS user_prefixes (
-            user_id INTEGER PRIMARY KEY,
-            prefix TEXT
-        );
-        CREATE TABLE IF NOT EXISTS floods (
-            gw INTEGER,
-            user_id INTEGER,
-            flood TEXT,
-            PRIMARY KEY (gw, user_id)
-        );
-        CREATE TABLE IF NOT EXISTS variabel (
-            _id INTEGER PRIMARY KEY,
-            vars TEXT
-        );
-        CREATE TABLE IF NOT EXISTS expired (
-            _id INTEGER PRIMARY KEY,
-            expire_date TEXT
-        );
-        CREATE TABLE IF NOT EXISTS userdata (
-            user_id INTEGER PRIMARY KEY,
-            depan TEXT,
-            belakang TEXT,
-            username TEXT,
-            mention TEXT,
-            full TEXT,
-            _id INTEGER
-        );
-        CREATE TABLE IF NOT EXISTS ubotdb (
-            user_id TEXT PRIMARY KEY,
-            session_string TEXT
-        );
-        CREATE TABLE IF NOT EXISTS tokens (
-            token TEXT PRIMARY KEY,
-            owner TEXT,
-            created_at TEXT,
-            usage_count INTEGER,
-            max_usage INTEGER,
-            usage_history TEXT
-        );
-
-        """
-        await self.conn.executescript(script)
-        await self.conn.commit()
-
-    async def ensure_connection(self):
-        if self.conn is None:
-            await self.connect()
+    # =========================================================
+    # PREFIX
+    # =========================================================
 
     async def get_pref(self, user_id):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                "SELECT prefix FROM user_prefixes WHERE user_id = ?", (user_id,)
+        data = await self.user_prefixes.find_one({
+            "_id": int(user_id)
+        })
+
+        if data:
+            return data.get(
+                "prefix",
+                [".", "-", "!", "+", "?"]
             )
-            result = await cursor.fetchone()
-            return json.loads(result[0]) if result else [".", "-", "!", "+", "?"]
+
+        return [".", "-", "!", "+", "?"]
 
     async def set_pref(self, user_id, prefix):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                """
-                INSERT OR REPLACE INTO user_prefixes (user_id, prefix)
-                VALUES (?, ?)
-            """,
-                (user_id, json.dumps(prefix)),
-            )
-        await self.conn.commit()
+        return await self.user_prefixes.update_one(
+            {"_id": int(user_id)},
+            {
+                "$set": {
+                    "prefix": prefix
+                }
+            },
+            upsert=True,
+        )
 
     async def rem_pref(self, user_id):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                "DELETE FROM user_prefixes WHERE user_id = ?", (user_id,)
-            )
-        await self.conn.commit()
+        return await self.user_prefixes.delete_one({
+            "_id": int(user_id)
+        })
 
-    async def set_var(self, bot_id, vars_name, value, query="vars"):
-        await self.ensure_connection()
-        json_value = json.dumps(value)
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                """
-                INSERT OR REPLACE INTO variabel (_id, vars)
-                VALUES (?, json_set(COALESCE((SELECT vars FROM variabel WHERE _id = ?), '{}'), ?, ?))
-                """,
-                (bot_id, bot_id, f"$.{query}.{vars_name}", json_value),
-            )
-        await self.conn.commit()
+    # =========================================================
+    # VARIABLES
+    # =========================================================
 
-    async def get_var(self, bot_id, vars_name, query="vars"):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute("SELECT vars FROM variabel WHERE _id = ?", (bot_id,))
-            document = await cursor.fetchone()
+    async def set_var(
+        self,
+        bot_id,
+        vars_name,
+        value,
+        query="vars",
+    ):
+        return await self.variabel.update_one(
+            {"_id": int(bot_id)},
+            {
+                "$set": {
+                    f"{query}.{vars_name}": value
+                }
+            },
+            upsert=True,
+        )
 
-            if document:
-                data = json.loads(document[0])
-                value = data.get(query, {}).get(vars_name)
-                try:
-                    return json.loads(value) if isinstance(value, str) else value
-                except json.JSONDecodeError:
-                    return value
+    async def get_var(
+        self,
+        bot_id,
+        vars_name,
+        query="vars",
+    ):
+        data = await self.variabel.find_one({
+            "_id": int(bot_id)
+        })
+
+        if not data:
             return None
 
-    async def remove_var(self, bot_id, vars_name, query="vars"):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                """
-                UPDATE variabel SET vars = json_remove(vars, ?) WHERE _id = ?
-            """,
-                (f"$.{query}.{vars_name}", bot_id),
-            )
-        await self.conn.commit()
+        return data.get(
+            query,
+            {}
+        ).get(vars_name)
 
-    async def all_var(self, user_id, query="vars"):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute("SELECT vars FROM variabel WHERE _id = ?", (user_id,))
-            result = await cursor.fetchone()
-            return json.loads(result[0]).get(query) if result else None
+    async def remove_var(
+        self,
+        bot_id,
+        vars_name,
+        query="vars",
+    ):
+        return await self.variabel.update_one(
+            {"_id": int(bot_id)},
+            {
+                "$unset": {
+                    f"{query}.{vars_name}": ""
+                }
+            },
+        )
+
+    async def all_var(
+        self,
+        user_id,
+        query="vars",
+    ):
+        data = await self.variabel.find_one({
+            "_id": int(user_id)
+        })
+
+        if not data:
+            return None
+
+        return data.get(query)
 
     async def rm_all(self, bot_id):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute("DELETE FROM variabel WHERE _id = ?", (bot_id,))
-        await self.conn.commit()
+        return await self.variabel.delete_one({
+            "_id": int(bot_id)
+        })
 
-    async def get_list_from_var(self, user_id, vars_name, query="vars"):
-        await self.ensure_connection()
-        vars_data = await self.get_var(user_id, vars_name, query)
-        return [int(x) for x in str(vars_data).split()] if vars_data else []
+    async def get_list_from_var(
+        self,
+        user_id,
+        vars_name,
+        query="vars",
+    ):
+        value = await self.get_var(
+            user_id,
+            vars_name,
+            query,
+        )
 
-    async def add_to_var(self, user_id, vars_name, value, query="vars"):
-        await self.ensure_connection()
-        vars_list = await self.get_list_from_var(user_id, vars_name, query)
-        vars_list.append(value)
-        await self.set_var(user_id, vars_name, " ".join(map(str, vars_list)), query)
+        if not value:
+            return []
 
-    async def remove_from_var(self, user_id, vars_name, value, query="vars"):
-        await self.ensure_connection()
-        vars_list = await self.get_list_from_var(user_id, vars_name, query)
-        if value in vars_list:
-            vars_list.remove(value)
-            await self.set_var(user_id, vars_name, " ".join(map(str, vars_list)), query)
+        if isinstance(value, list):
+            return value
+
+        return [
+            int(x)
+            for x in str(value).split()
+        ]
+
+    async def add_to_var(
+        self,
+        user_id,
+        vars_name,
+        value,
+        query="vars",
+    ):
+        data = await self.get_list_from_var(
+            user_id,
+            vars_name,
+            query,
+        )
+
+        if value not in data:
+            data.append(value)
+
+        return await self.set_var(
+            user_id,
+            vars_name,
+            " ".join(map(str, data)),
+            query,
+        )
+
+    async def remove_from_var(
+        self,
+        user_id,
+        vars_name,
+        value,
+        query="vars",
+    ):
+        data = await self.get_list_from_var(
+            user_id,
+            vars_name,
+            query,
+        )
+
+        if value in data:
+            data.remove(value)
+
+        return await self.set_var(
+            user_id,
+            vars_name,
+            " ".join(map(str, data)),
+            query,
+        )
+
+    # =========================================================
+    # EXPIRED
+    # =========================================================
 
     async def get_expired_date(self, user_id):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                "SELECT expire_date FROM expired WHERE _id = ?", (user_id,)
-            )
-            result = await cursor.fetchone()
-            return (
-                datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S.%f%z")
-                if result and result[0]
-                else None
-            )
+        data = await self.expired.find_one({
+            "_id": int(user_id)
+        })
 
-    async def set_expired_date(self, user_id, expire_date):
-        if isinstance(expire_date, str):
-            try:
-                expire_date = datetime.strptime(expire_date, "%Y-%m-%d %H:%M:%S.%f%z")
-            except ValueError:
-                expire_date = datetime.strptime(expire_date, "%Y-%m-%d %H:%M:%S.%f")
-                expire_date = expire_date.replace(tzinfo=timezone(timedelta(hours=7)))
-
-        formatted_date = expire_date.strftime("%Y-%m-%d %H:%M:%S.%f%z")
-
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                """
-                INSERT OR REPLACE INTO expired (_id, expire_date) VALUES (?, ?)
-                """,
-                (user_id, formatted_date),
-            )
-        await self.conn.commit()
-
-    async def rem_expired_date(self, user_id):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                """
-                UPDATE expired SET expire_date = NULL WHERE _id = ?
-            """,
-                (user_id,),
-            )
-        await self.conn.commit()
-
-    async def cek_userdata(self, user_id: int) -> bool:
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute("SELECT 1 FROM userdata WHERE user_id = ?", (user_id,))
-            result = await cursor.fetchone()
-            return bool(result)
-
-    async def get_userdata(self, user_id: int):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute("SELECT * FROM userdata WHERE user_id = ?", (user_id,))
-            result = await cursor.fetchone()
-
-            if result:
-                return {
-                    "user_id": result[0],
-                    "depan": result[1],
-                    "belakang": result[2],
-                    "username": result[3],
-                    "mention": result[4],
-                    "full": result[5],
-                    "_id": result[6],
-                }
+        if not data:
             return None
 
-    async def add_userdata(
-        self, user_id: int, depan, belakang, username, mention, full, _id
+        return data.get("expire_date")
+
+    async def set_expired_date(
+        self,
+        user_id,
+        expire_date,
     ):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                """
-                INSERT OR REPLACE INTO userdata (user_id, depan, belakang, username, mention, full, _id)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-                (user_id, depan, belakang, username, mention, full, _id),
-            )
-        await self.conn.commit()
-
-    async def add_ubot(self, user_id, session_string):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                """
-                INSERT OR REPLACE INTO ubotdb (user_id, session_string)
-                VALUES (?, ?)
-                """,
-                (user_id, session_string),
-            )
-        await self.conn.commit()
-
-    async def remove_columns_ubotdb(self):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                """
-                CREATE TABLE new_ubotdb (
-                    user_id INTEGER PRIMARY KEY,
-                    session_string TEXT NOT NULL
+        if isinstance(expire_date, str):
+            try:
+                expire_date = datetime.fromisoformat(
+                    expire_date
                 )
-            """
-            )
-            await cursor.execute(
-                """
-                INSERT INTO new_ubotdb (user_id, session_string)
-                SELECT user_id, session_string FROM ubotdb
-            """
-            )
-            await cursor.execute("DROP TABLE ubotdb")
-            await cursor.execute("ALTER TABLE new_ubotdb RENAME TO ubotdb")
-        await self.conn.commit()
-
-    async def remove_ubot(self, user_id):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute("DELETE FROM ubotdb WHERE user_id = ?", (user_id,))
-        await self.conn.commit()
-
-    async def get_ubot(self, user_id):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                "SELECT user_id, session_string FROM ubotdb WHERE user_id = ?",
-                (user_id,),
-            )
-            row = await cursor.fetchone()
-            if row:
-                user_id, session_string = row
-                return {
-                    "name": str(user_id),
-                    "session_string": session_string,
-                }
-            else:
+            except ValueError:
                 return None
 
-    async def get_userbots(self):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                "SELECT user_id, session_string FROM ubotdb WHERE user_id IS NOT NULL"
-            )
-            rows = await cursor.fetchall()
-            return [
-                {
-                    "name": str(user_id),
+        return await self.expired.update_one(
+            {"_id": int(user_id)},
+            {
+                "$set": {
+                    "expire_date": expire_date
+                }
+            },
+            upsert=True,
+        )
+
+    async def rem_expired_date(self, user_id):
+        return await self.expired.update_one(
+            {"_id": int(user_id)},
+            {
+                "$set": {
+                    "expire_date": None
+                }
+            },
+        )
+
+    # =========================================================
+    # USERDATA
+    # =========================================================
+
+    async def cek_userdata(self, user_id: int) -> bool:
+        data = await self.userdata.find_one({
+            "_id": int(user_id)
+        })
+
+        return data is not None
+
+    async def get_userdata(self, user_id: int):
+        return await self.userdata.find_one({
+            "_id": int(user_id)
+        })
+
+    async def add_userdata(
+        self,
+        user_id: int,
+        depan,
+        belakang,
+        username,
+        mention,
+        full,
+        _id,
+    ):
+        return await self.userdata.update_one(
+            {"_id": int(user_id)},
+            {
+                "$set": {
+                    "user_id": int(user_id),
+                    "depan": depan,
+                    "belakang": belakang,
+                    "username": username,
+                    "mention": mention,
+                    "full": full,
+                    "telegram_id": _id,
+                }
+            },
+            upsert=True,
+        )
+
+    # =========================================================
+    # USERBOT
+    # =========================================================
+
+    async def add_ubot(
+        self,
+        user_id,
+        session_string,
+    ):
+        return await self.ubotdb.update_one(
+            {"_id": int(user_id)},
+            {
+                "$set": {
+                    "user_id": int(user_id),
                     "session_string": session_string,
                 }
-                for user_id, session_string in rows
-            ]
+            },
+            upsert=True,
+        )
 
-    async def get_flood(self, gw: int, user_id: int):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                "SELECT flood FROM floods WHERE gw = ? AND user_id = ?", (gw, user_id)
-            )
-            result = await cursor.fetchone()
-            return result[0] if result else None
+    async def remove_ubot(self, user_id):
+        return await self.ubotdb.delete_one({
+            "_id": int(user_id)
+        })
 
-    async def set_flood(self, gw: int, user_id: int, flood: str):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                """
-                INSERT OR REPLACE INTO floods (gw, user_id, flood)
-                VALUES (?, ?, ?)
-            """,
-                (gw, user_id, flood),
-            )
-        await self.conn.commit()
+    async def get_ubot(self, user_id):
+        data = await self.ubotdb.find_one({
+            "_id": int(user_id)
+        })
+
+        if not data:
+            return None
+
+        return {
+            "name": str(data["user_id"]),
+            "session_string": data["session_string"],
+        }
+
+    async def get_userbots(self):
+        result = []
+
+        cursor = self.ubotdb.find({})
+
+        async for data in cursor:
+            result.append({
+                "name": str(data["user_id"]),
+                "session_string": data["session_string"],
+            })
+
+        return result
+
+    async def remove_columns_ubotdb(self):
+        # Tidak diperlukan di MongoDB.
+        return None
+
+    # =========================================================
+    # FLOOD
+    # =========================================================
+
+    async def get_flood(
+        self,
+        gw: int,
+        user_id: int,
+    ):
+        data = await self.floods.find_one({
+            "_id": f"{gw}:{user_id}"
+        })
+
+        return data.get("flood") if data else None
+
+    async def set_flood(
+        self,
+        gw: int,
+        user_id: int,
+        flood: str,
+    ):
+        return await self.floods.update_one(
+            {
+                "_id": f"{gw}:{user_id}"
+            },
+            {
+                "$set": {
+                    "gw": int(gw),
+                    "user_id": int(user_id),
+                    "flood": flood,
+                }
+            },
+            upsert=True,
+        )
+
+    async def rem_flood(
+        self,
+        gw: int,
+        user_id: int,
+    ):
+        return await self.floods.delete_one({
+            "_id": f"{gw}:{user_id}"
+        })
 
     async def remove_all_deleted_vars(self):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute("SELECT _id FROM variabel")
-            ids = await cursor.fetchall()
-            for (_id,) in ids:
-                await cursor.execute(
-                    "UPDATE variabel SET vars = json_remove(vars, '$.vars.DELETED') WHERE _id = ?",
-                    (_id,),
-                )
+        return await self.variabel.update_many(
+            {},
+            {
+                "$unset": {
+                    "vars.DELETED": ""
+                }
+            },
+        )
 
-        await self.conn.commit()
-
-    async def rem_flood(self, gw: int, user_id: int):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                "DELETE FROM floods WHERE gw = ? AND user_id = ?", (gw, user_id)
-            )
-        await self.conn.commit()
+    # =========================================================
+    # TOKEN
+    # =========================================================
 
     async def generate_token(
-        self, user_id: str, length=16, group_size=4, separator="-"
-    ) -> str:
-        await self.ensure_connection()
+        self,
+        user_id: str,
+        length=16,
+        group_size=4,
+        separator="-",
+    ):
         characters = string.ascii_uppercase + string.digits
-        raw_token = "".join(random.choice(characters) for _ in range(length))
-        grouped_token = separator.join(
-            raw_token[i : i + group_size] for i in range(0, length, group_size)
-        )
-        clean_token = grouped_token.replace(separator, "")
 
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                """
-                INSERT INTO tokens (token, owner, created_at, usage_count, max_usage, usage_history)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    clean_token,
-                    user_id,
-                    datetime.now().isoformat(),
-                    0,
-                    3,
-                    json.dumps([]),
-                ),
+        while True:
+            raw_token = "".join(
+                random.choice(characters)
+                for _ in range(length)
             )
-        await self.conn.commit()
+
+            grouped_token = separator.join(
+                raw_token[i:i + group_size]
+                for i in range(0, length, group_size)
+            )
+
+            clean_token = grouped_token.replace(
+                separator,
+                ""
+            )
+
+            exists = await self.tokens.find_one({
+                "_id": clean_token
+            })
+
+            if not exists:
+                break
+
+        await self.tokens.insert_one({
+            "_id": clean_token,
+            "token": clean_token,
+            "owner": str(user_id),
+            "created_at": datetime.now(timezone.utc),
+            "usage_count": 0,
+            "max_usage": 3,
+            "usage_history": [],
+        })
+
         return grouped_token
 
     async def get_token(self, user_id: int):
-        await self.ensure_connection()
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                "SELECT token, usage_count, max_usage FROM tokens WHERE owner = ?",
-                (str(user_id),),
-            )
-            row = await cursor.fetchone()
-            if not row:
-                return None
-            token, usage_count, max_usage = row
-            grouped_token = "-".join(token[i : i + 4] for i in range(0, len(token), 4))
-            return {
-                "token": grouped_token,
-                "usage_count": usage_count,
-                "max_usage": max_usage,
-                "remaining_usage": max_usage - usage_count,
-            }
+        data = await self.tokens.find_one({
+            "owner": str(user_id)
+        })
 
-    async def revoke_token(self, user_id: int, deleted: bool = False):
-        await self.ensure_connection()
+        if not data:
+            return None
 
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                "SELECT COUNT(*) FROM ubotdb WHERE user_id = ?", (user_id,)
+        token = data["token"]
+
+        grouped_token = "-".join(
+            token[i:i + 4]
+            for i in range(0, len(token), 4)
+        )
+
+        usage_count = data.get(
+            "usage_count",
+            0
+        )
+
+        max_usage = data.get(
+            "max_usage",
+            3
+        )
+
+        return {
+            "token": grouped_token,
+            "usage_count": usage_count,
+            "max_usage": max_usage,
+            "remaining_usage": max_usage - usage_count,
+        }
+
+    async def revoke_token(
+        self,
+        user_id: int,
+        deleted: bool = False,
+    ):
+        ubot = await self.ubotdb.find_one({
+            "_id": int(user_id)
+        })
+
+        if not ubot:
+            await self.tokens.delete_many({
+                "owner": str(user_id)
+            })
+
+            return (
+                False,
+                "Token dihapus karena userbot tidak ditemukan.",
             )
-            count = await cursor.fetchone()
-            if count[0] == 0:
-                async with self.conn.cursor() as cursor2:
-                    await cursor2.execute(
-                        "DELETE FROM tokens WHERE owner = ?", (str(user_id),)
-                    )
-                await self.conn.commit()
-                return False, "Token dihapus karena userbot tidak ditemukan."
 
         if deleted:
-            async with self.conn.cursor() as cursor:
-                await cursor.execute(
-                    "DELETE FROM tokens WHERE owner = ?", (str(user_id),)
-                )
-            await self.conn.commit()
+            await self.tokens.delete_many({
+                "owner": str(user_id)
+            })
+
             return True, "Token berhasil dihapus."
 
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                "SELECT token, usage_count, max_usage, usage_history FROM tokens WHERE owner = ?",
-                (str(user_id),),
-            )
-            row = await cursor.fetchone()
-            if not row:
-                return False, "Token lama tidak ditemukan."
+        old_token = await self.tokens.find_one({
+            "owner": str(user_id)
+        })
 
-            old_token, usage_count, max_usage, usage_history = row
+        if not old_token:
+            return False, "Token lama tidak ditemukan."
 
-            await cursor.execute("DELETE FROM tokens WHERE token = ?", (old_token,))
-            await self.conn.commit()
-
-        length = 16
-        group_size = 4
-        separator = "-"
-        characters = string.ascii_uppercase + string.digits
-        raw_token = "".join(random.choice(characters) for _ in range(length))
-        grouped_token = separator.join(
-            raw_token[i : i + group_size] for i in range(0, length, group_size)
+        usage_count = old_token.get(
+            "usage_count",
+            0
         )
-        clean_token = grouped_token.replace(separator, "")
+
+        max_usage = old_token.get(
+            "max_usage",
+            3
+        )
+
+        usage_history = old_token.get(
+            "usage_history",
+            []
+        )
+
+        await self.tokens.delete_one({
+            "_id": old_token["_id"]
+        })
+
+        new_token = await self.generate_token(
+            str(user_id)
+        )
+
+        clean_token = new_token.replace("-", "")
+
+        await self.tokens.update_one(
+            {"_id": clean_token},
+            {
+                "$set": {
+                    "usage_count": usage_count,
+                    "max_usage": max_usage,
+                    "usage_history": usage_history,
+                }
+            },
+        )
+
         remaining_usage = max_usage - usage_count
 
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                """
-                INSERT INTO tokens (token, owner, created_at, usage_count, max_usage, usage_history)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    clean_token,
-                    str(user_id),
-                    datetime.now().isoformat(),
-                    usage_count,
-                    max_usage,
-                    usage_history,
-                ),
-            )
-        await self.conn.commit()
         return (
             True,
-            f"Token berhasil di-revoke dan diganti.\nToken baru: `{grouped_token}`\nSisa penggunaan: {remaining_usage}",
+            "Token berhasil di-revoke dan diganti.\n"
+            f"Token baru: `{new_token}`\n"
+            f"Sisa penggunaan: {remaining_usage}",
         )
 
-    async def check_token_usage(self, token: str) -> dict:
-        await self.ensure_connection()
+    async def check_token_usage(
+        self,
+        token: str,
+    ):
         clean_token = token.replace("-", "")
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                "SELECT owner, created_at, usage_count, max_usage, usage_history FROM tokens WHERE token = ?",
-                (clean_token,),
-            )
-            row = await cursor.fetchone()
-            if not row:
-                return {
-                    "valid": False,
-                    "message": "Token tidak valid",
-                    "usage_count": 0,
-                    "max_usage": 3,
-                    "remaining_usage": 0,
-                }
-            owner, created_at, usage_count, max_usage, usage_history = row
+
+        data = await self.tokens.find_one({
+            "_id": clean_token
+        })
+
+        if not data:
             return {
-                "valid": True,
-                "message": "Token valid",
-                "usage_count": usage_count,
-                "max_usage": max_usage,
-                "remaining_usage": max_usage - usage_count,
-                "owner": owner,
-                "created_at": created_at,
-                "usage_history": json.loads(usage_history),
+                "valid": False,
+                "message": "Token tidak valid",
+                "usage_count": 0,
+                "max_usage": 3,
+                "remaining_usage": 0,
             }
 
-    async def use_token(self, token: str, usage_description: str = "Token digunakan"):
-        await self.ensure_connection()
+        usage_count = data.get(
+            "usage_count",
+            0
+        )
+
+        max_usage = data.get(
+            "max_usage",
+            3
+        )
+
+        return {
+            "valid": True,
+            "message": "Token valid",
+            "usage_count": usage_count,
+            "max_usage": max_usage,
+            "remaining_usage": max_usage - usage_count,
+            "owner": data.get("owner"),
+            "created_at": data.get("created_at"),
+            "usage_history": data.get(
+                "usage_history",
+                []
+            ),
+        }
+
+    async def use_token(
+        self,
+        token: str,
+        usage_description: str = "Token digunakan",
+    ):
         clean_token = token.replace("-", "")
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                "SELECT usage_count, max_usage, usage_history FROM tokens WHERE token = ?",
-                (clean_token,),
+
+        data = await self.tokens.find_one({
+            "_id": clean_token
+        })
+
+        if not data:
+            return False, "Token tidak valid"
+
+        usage_count = data.get(
+            "usage_count",
+            0
+        )
+
+        max_usage = data.get(
+            "max_usage",
+            3
+        )
+
+        if usage_count >= max_usage:
+            return (
+                False,
+                f"Token telah mencapai batas penggunaan maksimal "
+                f"({max_usage} kali)",
             )
-            row = await cursor.fetchone()
-            if not row:
-                return False, "Token tidak valid"
-            usage_count, max_usage, usage_history = row
-            if usage_count >= max_usage:
-                return (
-                    False,
-                    f"Token telah mencapai batas penggunaan maksimal ({max_usage} kali)",
-                )
-            usage_count += 1
-            history = json.loads(usage_history)
-            history.append(
-                {
-                    "timestamp": datetime.now().isoformat(),
-                    "description": usage_description,
+
+        usage_count += 1
+
+        history = data.get(
+            "usage_history",
+            []
+        )
+
+        history.append({
+            "timestamp": datetime.now(timezone.utc),
+            "description": usage_description,
+        })
+
+        await self.tokens.update_one(
+            {"_id": clean_token},
+            {
+                "$set": {
+                    "usage_count": usage_count,
+                    "usage_history": history,
                 }
-            )
-            await cursor.execute(
-                """
-                UPDATE tokens SET usage_count = ?, usage_history = ?
-                WHERE token = ?
-            """,
-                (usage_count, json.dumps(history), clean_token),
-            )
-        await self.conn.commit()
+            },
+        )
+
         return (
             True,
-            f"Token berhasil digunakan. Sisa penggunaan: {max_usage - usage_count} kali",
+            f"Token berhasil digunakan. "
+            f"Sisa penggunaan: {max_usage - usage_count} kali",
         )
 
     async def verify_token(self, token: str):
-        await self.ensure_connection()
         clean_token = token.replace("-", "")
-        async with self.conn.cursor() as cursor:
-            await cursor.execute(
-                "SELECT owner, usage_count, max_usage FROM tokens WHERE token = ?",
-                (clean_token,),
-            )
-            row = await cursor.fetchone()
-            if not row:
-                return None
-            owner, usage_count, max_usage = row
-            if usage_count >= max_usage:
-                return None
-            return {"user_id": owner, "token": clean_token}
 
-    async def backup_database(self):
-        db_file = Path(self.db_path)
-        env_file = Path(self.env_path)
-        if not db_file.exists():
-            print(f"⚠️ File {self.db_path} tidak ditemukan!")
+        data = await self.tokens.find_one({
+            "_id": clean_token
+        })
+
+        if not data:
             return None
-        self.temp_dir.mkdir(parents=True, exist_ok=True)
-        temp_db_file = self.temp_dir / db_file.name
-        if env_file.exists():
-            await aioshutil.copy(env_file, temp_db_file)
-            await aioshutil.copy(db_file, temp_db_file)
-        else:
-            await aioshutil.copy(db_file, temp_db_file)
-        archive_full_path = await aioshutil.make_archive(
-            self.db_backup, self.db_backup_format, self.temp_dir
+
+        usage_count = data.get(
+            "usage_count",
+            0
         )
-        await aioshutil.rmtree(self.temp_dir)
-        print(f"✅ Arsip berhasil dibuat: {archive_full_path}")
-        return archive_full_path
+
+        max_usage = data.get(
+            "max_usage",
+            3
+        )
+
+        if usage_count >= max_usage:
+            return None
+
+        return {
+            "user_id": data.get("owner"),
+            "token": clean_token,
+        }
+
+    # =========================================================
+    # CLOSE
+    # =========================================================
 
     async def close(self):
-        if self.conn:
-            await self.conn.close()
-            print("Database connection closed.")
+        if self.mongo:
+            await self.mongo.close()
 
 
-# Initialize database
-dB = DatabaseClient()
+db = MongoDB()
+
+# Kompatibilitas dengan kode lama:
+dB = db
