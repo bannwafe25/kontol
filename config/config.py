@@ -43,7 +43,7 @@ MAX_BOT = int(os.environ.get("MAX_BOT", 500))
 API_HASH = os.environ.get("API_HASH", "f80a208b8cd4709c30c26ceacae9e1be")
 
 BOT_TOKEN = os.environ.get(
-    "BOT_TOKEN", "8963832760:AAGCp3fygvp7e2feRqVLq4V3sYb4RDLe_jM"
+    "BOT_TOKEN", "8976770735:AAEM2ApgB15QGbsEi9HcKkOiH7msM0XG-4c"
 )
 
 BOT_ID = int(BOT_TOKEN.split(":")[0])
@@ -68,6 +68,8 @@ API_BOTCAHX = os.environ.get("API_BOTCAHX", "Mx6ZHlmS")
 BOT_NAME = os.environ.get("BOT_NAME", "zpxbot")
 
 DB_NAME = os.environ.get("DB_NAME", "zpxuserbot")
+
+MONGO_DB_URI = getenv("MONGO_DB_URI", None)
 
 URL_LOGO = os.environ.get("URL_LOGO", "https://files.catbox.moe/18pdex.jpg")
 
