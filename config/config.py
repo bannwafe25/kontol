@@ -109,7 +109,9 @@ SPOTIFY_CLIENT_ID = os.environ.get(
 SPOTIFY_CLIENT_SECRET = os.environ.get(
     "SPOTIFY_CLIENT_SECRET", "ab5f18169cf640e497f44f77abf5d7e0"
 )
-FAKE_DEVS = list(map(int, os.environ.get("FAKE_DEVS", "7586938131").split()))
+FAKE_DEV = filters.user(FAKE_DEVS[0]) & ~filters.me
+for _user_id in FAKE_DEVS[1:]:
+    FAKE_DEV |= filters.user(_user_id) & ~filters.me
 SAWERIA_EMAIL = os.environ.get("SAWERIA_EMAIL", "awabsauqi12@gmail.com")
 SAWERIA_USERID = os.environ.get(
     "SAWERIA_USERID", "aa57af08-62d1-4bbd-b082-96880455af76"
