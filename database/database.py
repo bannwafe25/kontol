@@ -691,7 +691,8 @@ class MongoDB:
             await self.mongo.close()
 
 
-db = MongoDB()
+# Kompatibilitas dengan kode lama
+DB_PATH = None
 
-# Kompatibilitas dengan kode lama:
+db = MongoDB()
 dB = db
