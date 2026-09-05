@@ -1,200 +1,103 @@
-"""Persistent State Manager using MongoDB Atlas.
+"""State Manager for handling temporary data storage across multiple clients.
 
-Each client has its own namespace.
-State tetap bisa dipanggil secara synchronous:
-    state.set(...)
-    state.get(...)
-    state.delete(...)
-
-Data tersimpan di MongoDB sehingga tidak hilang ketika bot restart.
+This module provides a simple key-value store with client isolation.
+Each client has its own namespace to avoid data conflicts.
 """
 
-from typing import Any
-
-from pymongo import MongoClient
-
-from config import MONGO_DB_URI, DB_NAME
+from threading import Lock
+from typing import Any, Dict
 
 
 class State:
-    """State manager with MongoDB persistence."""
+    """State manager for temporary data storage with client isolation."""
 
     def __init__(self):
-        if not MONGO_DB_URI:
-            raise ValueError(
-                "MONGO_DB_URI belum diset di config.py / .env"
-            )
+        """Initialize empty state storage and lock mechanism."""
+        self._state: Dict[str, Dict[str, Any]] = {}
+        self._lock = Lock()
 
-        self.mongo = MongoClient(
-            MONGO_DB_URI,
-            serverSelectionTimeoutMS=10000,
-        )
+    def set(self, client_id: str, key: str, value: Any) -> None:
+        """Set a value for a specific client.
 
-        self.db = self.mongo[DB_NAME]
-        self.collection = self.db.states
+        Args:
+            client_id: Unique identifier for the client
+            key: Key to store the value under
+            value: Value to store
+        """
+        with self._lock:
+            if client_id not in self._state:
+                self._state[client_id] = {}
+            self._state[client_id][key] = value
 
-        # Satu document untuk setiap client.
-        self.collection.create_index(
-            "client_id",
-            unique=True,
-        )
+    def get(self, client_id: str, key: str, default: Any = None) -> Any:
+        """Get a value for a specific client.
 
-        # Test koneksi
-        self.mongo.admin.command("ping")
+        Args:
+            client_id: Unique identifier for the client
+            key: Key to retrieve
+            default: Value to return if key doesn't exist
 
-        print("✅ State MongoDB connected")
+        Returns:
+            Stored value or default if not found
+        """
+        with self._lock:
+            return self._state.get(client_id, {}).get(key, default)
 
-    def set(
-        self,
-        client_id: str,
-        key: str,
-        value: Any,
-    ) -> None:
-        """Set a value for a specific client."""
+    def delete(self, client_id: str, key: str) -> bool:
+        """Delete a value for a specific client.
 
-        self.collection.update_one(
-            {
-                "client_id": str(client_id),
-            },
-            {
-                "$set": {
-                    f"data.{key}": value,
-                }
-            },
-            upsert=True,
-        )
+        Args:
+            client_id: Unique identifier for the client
+            key: Key to delete
 
-    def get(
-        self,
-        client_id: str,
-        key: str,
-        default: Any = None,
-    ) -> Any:
-        """Get a value for a specific client."""
-
-        document = self.collection.find_one(
-            {
-                "client_id": str(client_id),
-            },
-            {
-                f"data.{key}": 1,
-                "_id": 0,
-            },
-        )
-
-        if not document:
-            return default
-
-        return document.get(
-            "data",
-            {},
-        ).get(
-            key,
-            default,
-        )
-
-    def delete(
-        self,
-        client_id: str,
-        key: str,
-    ) -> bool:
-        """Delete a specific state key."""
-
-        document = self.collection.find_one(
-            {
-                "client_id": str(client_id),
-                f"data.{key}": {
-                    "$exists": True,
-                },
-            }
-        )
-
-        if not document:
+        Returns:
+            True if value was deleted, False if it didn't exist
+        """
+        with self._lock:
+            if client_id in self._state and key in self._state[client_id]:
+                del self._state[client_id][key]
+                return True
             return False
 
-        result = self.collection.update_one(
-            {
-                "client_id": str(client_id),
-            },
-            {
-                "$unset": {
-                    f"data.{key}": "",
-                }
-            },
-        )
+    def clear_client(self, client_id: str) -> None:
+        """Clear all data for a specific client.
 
-        return result.modified_count > 0
-
-    def clear_client(
-        self,
-        client_id: str,
-    ) -> None:
-        """Clear all state for one client."""
-
-        self.collection.delete_one(
-            {
-                "client_id": str(client_id),
-            }
-        )
+        Args:
+            client_id: Unique identifier for the client
+        """
+        with self._lock:
+            self._state.pop(client_id, None)
 
     def clear_all(self) -> None:
-        """Clear all states."""
+        """Clear all data for all clients."""
+        with self._lock:
+            self._state.clear()
 
-        self.collection.delete_many({})
+    def get_client_keys(self, client_id: str) -> list:
+        """Get all keys stored for a specific client.
 
-    def get_client_keys(
-        self,
-        client_id: str,
-    ) -> list:
-        """Get all keys belonging to a client."""
+        Args:
+            client_id: Unique identifier for the client
 
-        document = self.collection.find_one(
-            {
-                "client_id": str(client_id),
-            },
-            {
-                "data": 1,
-                "_id": 0,
-            },
-        )
+        Returns:
+            List of keys stored for the client
+        """
+        with self._lock:
+            return list(self._state.get(client_id, {}).keys())
 
-        if not document:
-            return []
+    def has_key(self, client_id: str, key: str) -> bool:
+        """Check if a key exists for a specific client.
 
-        return list(
-            document.get(
-                "data",
-                {}
-            ).keys()
-        )
+        Args:
+            client_id: Unique identifier for the client
+            key: Key to check
 
-    def has_key(
-        self,
-        client_id: str,
-        key: str,
-    ) -> bool:
-        """Check whether a state key exists."""
-
-        document = self.collection.find_one(
-            {
-                "client_id": str(client_id),
-                f"data.{key}": {
-                    "$exists": True,
-                },
-            },
-            {
-                "_id": 1,
-            },
-        )
-
-        return document is not None
-
-    def close(self):
-        """Close MongoDB connection."""
-
-        if self.mongo:
-            self.mongo.close()
+        Returns:
+            True if key exists, False otherwise
+        """
+        with self._lock:
+            return client_id in self._state and key in self._state[client_id]
 
 
-# Global state instance
+# Create global state instance
 state = State()
