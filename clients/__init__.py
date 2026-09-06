@@ -8,7 +8,6 @@ from .base import BaseClient
 from .bot import Bot, bot
 from .registry import HandlerRegistry, pytgcalls_registry
 from .userbot import UserBot, navy
-from .assistant import AssistantClient, assistant
 __all__ = [
     "session",
     "BaseClient",
@@ -18,6 +17,4 @@ __all__ = [
     "bot",
     "HandlerRegistry",
     "pytgcalls_registry",
-    "AssistantClient",
-    "assistant",
 ]
