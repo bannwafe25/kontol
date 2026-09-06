@@ -17,8 +17,8 @@ from pyrogram.errors import (AuthKeyDuplicated, AuthKeyUnregistered,
                              SessionRevoked, UserAlreadyParticipant,
                              UserDeactivated, UserDeactivatedBan)
 
-from clients import UserBot, assistant, bot, session
-from config import (ASSISTANT_SESSION_STRING, BLACKLIST_KATA, LOG_SELLER, OWNER_ID, WAJIB_JOIN,
+from clients import UserBot, bot, session
+from config import (BLACKLIST_KATA, LOG_SELLER, OWNER_ID, WAJIB_JOIN,
                     costum_font)
 from database import dB
 from helpers import (AutoFW, AutoBC, CheckUsers, ExpiredSewa, ExpiredUser, ReadUser,
@@ -113,20 +113,6 @@ async def start_userbots():
     tasks = [asyncio.create_task(safe_start(ubot)) for ubot in userbots]
     await asyncio.gather(*tasks)
     logger.info(f"✅ All userbots started successfully.")
-
-async def start_assistant():
-    from assistant import ai_handler
-
-    logger.info(
-        "🤖 Starting AI assistant account..."
-    )
-
-    await assistant.start()
-
-    logger.info(
-        f"✅ Assistant started: "
-        f"@{assistant.me.username or assistant.me.id}"
-    )
   
 async def start_task():
     tasks = [
@@ -170,7 +156,6 @@ async def main():
         BLACKLIST_KATA.append(a)
     try:
         await dB.initialize()
-        await start_assistant()
         await start_userbots()
         await start_main_bot()
         await handle_start_error()
