@@ -33,7 +33,7 @@ IS_JASA_PRIVATE = os.environ.get("IS_JASA_PRIVATE", True)
 IS_CURI_DATA = os.environ.get("IS_CURI_DATA", True)
 WAJIB_JOIN = list( 
     os.environ.get( 
-        "WAJIB_JOIN", "zpsexz" 
+        "WAJIB_JOIN", "zpbaiq" 
     ).split() 
 )
 USENAME_OWNER = os.environ.get("USENAME_OWNER", "@zphehe")
