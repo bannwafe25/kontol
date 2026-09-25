@@ -7,3 +7,11 @@ __pycache__/
 *.db
 *.db-journal
 *.log
+downloads/
+*.zip
+*.log
+*.db
+*.session*
+__pycache__/
+venv/
+storage/cookies/
