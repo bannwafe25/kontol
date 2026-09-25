@@ -144,5 +144,15 @@ async def _(client, callback):
             return await callback_cancel(client, callback)
         elif query.startswith("streaming_ctrl"):
             return await callback_streamings(client, callback)
+        elif query == "close":
+            try:
+                return await callback.answer()
+            except Exception:
+                pass
+        elif query.startswith("close help"):
+            try:
+                return await callback.message.delete()
+            except Exception:
+                return await callback.answer("Gagal menghapus pesan", True)
     except Exception:
         logger.error(f"Callback error: {traceback.format_exc()}")
