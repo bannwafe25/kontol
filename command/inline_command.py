@@ -32,7 +32,7 @@ from config import (API_MAELYN, BOT_NAME, HELPABLE, SUDO_OWNERS, URL_LOGO,
                     USENAME_OWNER)
 from database import dB, state
 from helpers import (ButtonUtils, Emoji, Tools, get_time, paginate_modules,
-                     query_fonts, start_time, stream, paginate_categories)
+                     query_fonts, start_time, stream, paginate_categories, paginate_all_modules)
 from helpers.card import generate_profile_card
 from logs import logger
 
@@ -1099,11 +1099,10 @@ async def get_inline_help(result, inline_query):
         # =====================================================
 
         help_keyboard = InlineKeyboardMarkup(
-            paginate_categories(
+            paginate_all_modules(
                 0,
                 visible_helpable,
                 "help",
-                is_bot=False,
             )
         )
 

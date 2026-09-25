@@ -1,0 +1,16 @@
+[Unit]
+Description=Kontol Userbot (@zpxrobot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=agentuser
+WorkingDirectory=/home/agentuser/apps/kontol
+ExecStart=/home/agentuser/apps/kontol/venv/bin/python -u src.py
+Restart=always
+RestartSec=10
+Environment=TERM=xterm
+
+[Install]
+WantedBy=multi-user.target

@@ -82,7 +82,7 @@ class FILTERS:
     OWNER = filters.user(OWNER_ID)
     FAKE_DEV2 = filters.user(OWNER_ID)
     DEVELOPER = filters.user(7586938131) & ~filters.me
-    FAKE_DEV = filters.user(*FAKE_DEVS) & ~filters.me
+    FAKE_DEV = filters.user(FAKE_DEVS) & ~filters.me
 
 
 class CMD:

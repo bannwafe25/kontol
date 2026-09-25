@@ -26,7 +26,7 @@ from config import (API_MAELYN, BOT_NAME, HELPABLE, KYNAN, LOG_SELLER,
                     SUDO_OWNERS, USENAME_OWNER)
 from database import dB, state
 from helpers import (ButtonUtils, Emoji, Message, Spotify, Tools, gens_font,
-                     paginate_modules, paginate_categories, query_fonts, stream, task, youtube, download_thumbnail, EqInlineKeyboardButton)
+                     paginate_modules, paginate_categories, paginate_all_modules, query_fonts, stream, task, youtube, download_thumbnail, EqInlineKeyboardButton)
           
 from logs import logger
 
@@ -856,6 +856,43 @@ async def cb_help(_, callback_query):
     )
 
     # =====================================================
+    # ALL-MODULES PAGE PREV / NEXT (tanpa kategori)
+    # =====================================================
+
+    match = re.match(
+        r"help_pages\((\d+)\)",
+        data,
+    )
+
+    if match:
+        page = int(match.group(1))
+        return await costum_cq(
+            **{
+                costum_text:
+                    top_text.format(
+                        plan,
+                        " ".join(prefix),
+                        len(visible),
+                        callback_query.from_user.mention,
+                        await dB.get_var(user_id, "text_help")
+                        or (
+                            f"**🤖 "
+                            f"{BOT_NAME} "
+                            f"by "
+                            f"{USENAME_OWNER}**"
+                        ),
+                    )
+            },
+            reply_markup=InlineKeyboardMarkup(
+                paginate_all_modules(
+                    page,
+                    visible,
+                    "help",
+                )
+            ),
+        )
+
+    # =====================================================
     # CATEGORY PAGE PREV / NEXT
     # =====================================================
 
@@ -998,10 +1035,8 @@ async def cb_help(_, callback_query):
                     (
                         "🔙 Back",
                         (
-                            f"help_category("
-                            f"{category},"
-                            f"{category_page},"
-                            f"{module_page}"
+                            f"help_pages("
+                            f"{category_page}"
                             f")"
                         ),
                     )

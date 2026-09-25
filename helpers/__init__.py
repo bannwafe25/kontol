@@ -2,7 +2,7 @@ from .afk import AFK_
 from .autobc import AUTOBC_STATUS, AutoBC
 from .autofw import AUTOFW_STATUS, AutoFW
 from .bingai import AsyncImageGenerator, Bing
-from .buttons import ButtonUtils, paginate_modules, paginate_categories, EqInlineKeyboardButton
+from .buttons import ButtonUtils, paginate_modules, paginate_categories, paginate_all_modules, EqInlineKeyboardButton
 from .commands import CMD, FILTERS, no_commands, no_trigger, trigger
 from .class_horoscope import horoscope
 from .data_fun import jodoh_data, FITNAH_MESSAGES, ROAST_MESSAGES, RANDOM_REPLY
@@ -39,6 +39,7 @@ __all__ = [
     "ButtonUtils",
     "paginate_modules",
     "paginate_categories",
+    "paginate_all_modules",
     "EqInlineKeyboardButton",
     "CMD",
     "FILTERS",

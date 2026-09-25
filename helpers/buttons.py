@@ -1531,3 +1531,75 @@ class ButtonUtils:
         )
 
         return rows
+
+def paginate_all_modules(
+    page_n,
+    module_dict,
+    prefix,
+):
+    """
+    Pagination SEMUA plugin langsung (tanpa kategori).
+    2 kolom x 4 baris = 8 plugin / halaman.
+    """
+    modules = []
+    for item in module_dict.values():
+        module = item.get("module")
+        if module is None:
+            continue
+        if not hasattr(module, "__MODULES__"):
+            continue
+        modules.append(module.__MODULES__)
+
+    modules = sorted(modules, key=lambda x: x.lower())
+
+    per_page = NUM_COLUMNS * COLUMN_SIZE
+    total_pages = max(1, ceil(len(modules) / per_page))
+    page_n = max(0, min(page_n, total_pages - 1))
+
+    current = modules[page_n * per_page:(page_n + 1) * per_page]
+
+    buttons = []
+    for i in range(0, len(current), NUM_COLUMNS):
+        row = []
+        for name in current[i:i + NUM_COLUMNS]:
+            row.append(
+                EqInlineKeyboardButton(
+                    name,
+                    callback_data=(
+                        f"{prefix}_module("
+                        f"{name.lower()},"
+                        f"{page_n},"
+                        f"0"
+                        f")"
+                    ),
+                    style=enums.ButtonStyle.SUCCESS,
+                )
+            )
+        buttons.append(row)
+
+    nav = []
+    if page_n > 0:
+        nav.append(
+            EqInlineKeyboardButton(
+                "⬅️",
+                callback_data=f"{prefix}_pages({page_n - 1})",
+                style=enums.ButtonStyle.PRIMARY,
+            )
+        )
+    nav.append(
+        EqInlineKeyboardButton(
+            f"{page_n + 1}/{total_pages}",
+            callback_data="help_noop",
+            style=enums.ButtonStyle.PRIMARY,
+        )
+    )
+    if page_n < total_pages - 1:
+        nav.append(
+            EqInlineKeyboardButton(
+                "➡️",
+                callback_data=f"{prefix}_pages({page_n + 1})",
+                style=enums.ButtonStyle.PRIMARY,
+            )
+        )
+    buttons.append(nav)
+    return buttons
