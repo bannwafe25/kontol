@@ -1588,9 +1588,9 @@ def paginate_all_modules(
         )
     nav.append(
         EqInlineKeyboardButton(
-            f"{page_n + 1}/{total_pages}",
-            callback_data="help_noop",
-            style=enums.ButtonStyle.PRIMARY,
+            "Close",
+            callback_data="close help",
+            style=enums.ButtonStyle.DANGER,
         )
     )
     if page_n < total_pages - 1:
@@ -1602,4 +1602,5 @@ def paginate_all_modules(
             )
         )
     buttons.append(nav)
+
     return buttons
