@@ -101,7 +101,7 @@ OWNER_ID = int(os.environ.get("OWNER_ID",8974636194))
 
 LOG_SELLER = int(os.environ.get("LOG_SELLER",-1004455876342))
 
-LOG_BACKUP = int(os.environ.get("LOG_BACKUP",-1003996218782))
+LOG_BACKUP = int(os.environ.get("LOG_BACKUP",-1004455876342))
 
 SPOTIFY_CLIENT_ID = os.environ.get(
     "SPOTIFY_CLIENT_ID", "e09ff7a19b204b62b6048a73bd605fe6"
