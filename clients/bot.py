@@ -123,10 +123,13 @@ class Bot(BaseClient):
                 types.BotCommand("listseller", "Cek daftar seller."),
                 types.BotCommand("cekubot", "Lihat pengguna bot."),
             ]
-            await self.set_bot_commands(
-                user_cmd + owner_cmd,
-                scope=types.BotCommandScopeChat(chat_id=OWNER_ID),
-            )
+            try:
+                await self.set_bot_commands(
+                    user_cmd + owner_cmd,
+                    scope=types.BotCommandScopeChat(chat_id=OWNER_ID),
+                )
+            except Exception as e:
+                logger.warning(f"Skip set owner commands: {e}")
         for modul in _PLUGINS:
             imported_module = importlib.import_module(f"plugins.{modul}")
             is_pro_plugin = getattr(imported_module, "IS_PRO", False)

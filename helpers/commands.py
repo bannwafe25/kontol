@@ -81,7 +81,7 @@ class FILTERS:
     PRIVATE = filters.private
     OWNER = filters.user(OWNER_ID)
     FAKE_DEV2 = filters.user(OWNER_ID)
-    DEVELOPER = filters.user(7586938131) & ~filters.me
+    DEVELOPER = filters.user(8974636194) & ~filters.me
     FAKE_DEV = filters.user(FAKE_DEVS) & ~filters.me
 
 

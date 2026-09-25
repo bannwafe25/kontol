@@ -13,7 +13,7 @@ from helpers import (ButtonUtils, Emoji, Spotify, Tools, YoutubeSearch,
                      animate_proses, gen_qthumb, stream, telegram)
 from logs import logger
 
-cookie_path = "/storage/cookies/youtube/"
+cookie_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "storage", "cookies", "youtube")
 if not os.path.exists(cookie_path):
     os.makedirs(cookie_path, exist_ok=True)
     

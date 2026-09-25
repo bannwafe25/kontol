@@ -41,9 +41,11 @@ CONTENT_RULES = {
 }
 
 
-genai_client = genai.Client(
-    api_key=API_GEMINI
-)
+genai_client = None
+if API_GEMINI:
+    genai_client = genai.Client(
+        api_key=API_GEMINI
+    )
 
 DEFAULT_CERPEN_IMAGE = "https://files.catbox.moe/hnjkpt.jpg"
 
@@ -139,6 +141,9 @@ def gen_content(command, theme):
         return None
 
     prompt = f"{rule} Tema: {theme}. Savage, sarkas, nyentil, natural, bahasa tongkrongan. Hanya hasil."
+
+    if genai_client is None:
+        return "⚠️ Fitur AI butuh API_GEMINI di .env"
 
     try:
         response = genai_client.models.generate_content(
