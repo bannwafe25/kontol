@@ -24,7 +24,7 @@ from requests.packages.urllib3.util.retry import Retry
 
 from config import API_MAELYN, SUDO_OWNERS
 from database import dB
-from helpers import (ApiImage, Emoji, Message, Quotly, Sticker, Tools,
+from helpers import (AnimePicFetcher, ApiImage, Emoji, Message, Quotly, Sticker, Tools,
                      animate_proses)
 
 
@@ -233,22 +233,24 @@ async def waifu_cmd(client, message):
     em = Emoji(client)
     await em.get()
 
-    message.reply_to_message
     proses = await animate_proses(message, em.proses)
+
+    # tag animepic: default wall -> scenery/konachan, waifu -> waifu
     if message.command[0] == "wall":
-        photo = await ApiImage.wall(client)
-        try:
-            await photo.copy(message.chat.id, reply_to_message_id=message.id)
-            return await proses.delete()
-        except Exception as error:
-            return await proses.edit(f"{em.gagal}**{str(error)}**")
-    elif message.command[0] == "waifu":
-        photo = "https://api.deline.web.id/random/loli"
-        try:
-            await message.reply_photo(photo)
-            return await proses.delete()
-        except Exception as error:
-            return await proses.edit(f"{em.gagal}**{str(error)}**")
+        tag = random.choice(["scenery", "landscape", "sky", "konachan"])
+    else:
+        tag = "waifu"
+
+    fetcher = AnimePicFetcher(client.http)
+    try:
+        result = await fetcher.get_image_url(tag)
+        if not result:
+            return await proses.edit(f"{em.gagal}**Gagal mengambil gambar, coba lagi.**")
+        url = result[0]
+        await message.reply_photo(url)
+        return await proses.delete()
+    except Exception as error:
+        return await proses.edit(f"{em.gagal}**{str(error)[:200]}**")
           
 async def pic_cmd(client, message):
     em = Emoji(client)

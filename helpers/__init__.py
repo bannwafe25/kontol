@@ -18,6 +18,7 @@ from .spotify import Spotify
 from .tasks import task
 from .thumbnail import gen_qthumb
 from .times import get_time, start_time
+from .animepic import AnimePicFetcher
 from .tools import HTML, ApiImage, Tools
 from .ytdlp import YoutubeSearch, cookies, stream, telegram, youtube, download_thumbnail
 
@@ -66,6 +67,7 @@ __all__ = [
     "gen_qthumb",
     "get_time",
     "start_time",
+    "AnimePicFetcher",
     "HTML",
     "ApiImage",
     "Tools",
