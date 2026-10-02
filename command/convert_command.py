@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import httpx
 import io
 import json
 import os
@@ -26,6 +27,9 @@ from config import API_MAELYN, SUDO_OWNERS
 from database import dB
 from helpers import (AnimePicFetcher, ApiImage, Emoji, Message, Quotly, Sticker, Tools,
                      animate_proses)
+
+# Shared HTTP client buat AnimePicFetcher (UserBot gak punya .http)
+_shared_http = httpx.AsyncClient(timeout=30)
 
 
 def download_website(url):
@@ -241,7 +245,7 @@ async def waifu_cmd(client, message):
     else:
         tag = "waifu"
 
-    fetcher = AnimePicFetcher(client.http)
+    fetcher = AnimePicFetcher(_shared_http)
     try:
         result = await fetcher.get_image_url(tag)
         if not result:
