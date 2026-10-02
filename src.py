@@ -161,7 +161,7 @@ async def main():
         await handle_start_error()
         await start_task()
 
-        asyncio.create_task(auto_restart_scheduler())
+        # auto-restart 00:00 WIB dimatikan (permintaan owner)
     except KeyboardInterrupt:
         logger.warning("Forced stop… Bye!")
 

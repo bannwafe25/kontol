@@ -50,17 +50,6 @@ BOT_ID = int(BOT_TOKEN.split(":")[0])
 
 API_GEMINI = os.environ.get("API_GEMINI", "")
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-
-XKIRO_API_KEY = os.environ.get("XKIRO_API_KEY", "")
-XKIRO_BASE_URL = os.environ.get(
-    "XKIRO_BASE_URL",
-    "https://api.xkiro.com/v1"
-)
-XKIRO_MODEL = os.environ.get(
-    "XKIRO_MODEL",
-    "deepseek/deepseek-v4-flash"
-)
 API_MAELYN = os.environ.get("API_MAELYN", "")
 
 API_BOTCAHX = os.environ.get("API_BOTCAHX", "Mx6ZHlmS")
