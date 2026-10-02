@@ -54,8 +54,7 @@ from .fake_command import (fstik_cmd, ftype_cmd, fvideo_cmd, fvoice_cmd,
                            task_cmd)
 # from .filter_command import (FILTERS, REP_BLOCK, filter_cmd, filters_cmd, get_raw_filter, getfilter_cmd, stopfilter_cmd)
 from .funny_command import (cute_cmd, horny_cmd, hot_cmd, sexy_cmd, gay_cmd,
-                            lesby_cmd, boob_cmd, cock_cmd, rate_cmd, fitnah_cmd,
-                            roasting_cmd, stop_roasting_cmd)
+                            lesby_cmd, boob_cmd, cock_cmd, rate_cmd)
 from .gempa_command import gempa_cmd
 from .gen_img_command import (brat_cmd,
                               maker_img_cmd, quote_cmd)
@@ -142,9 +141,6 @@ __all__ = [
     "shio_cmd", 
     "keberutungan_cmd", 
     "naga_cmd",
-    "stop_roasting_cmd", 
-    "roasting_cmd", 
-    "fitnah_cmd", 
     "rate_cmd", 
     "cock_cmd", 
     "boob_cmd", 

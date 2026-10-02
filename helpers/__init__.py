@@ -4,7 +4,7 @@ from .autofw import AUTOFW_STATUS, AutoFW
 from .bingai import AsyncImageGenerator, Bing
 from .buttons import ButtonUtils, paginate_modules, paginate_categories, paginate_all_modules, EqInlineKeyboardButton
 from .commands import CMD, FILTERS, no_commands, no_trigger, trigger
-from .data_fun import jodoh_data, FITNAH_MESSAGES, ROAST_MESSAGES, RANDOM_REPLY
+from .data_fun import jodoh_data
 from .emoji_logs import Basic_Effect, Emoji, Premium_Effect, animate_proses
 from .fonts import Fonts, gens_font, query_fonts
 from .loaders import (CheckUsers, ExpiredSewa, ExpiredUser, installPeer,
@@ -24,8 +24,6 @@ from .ytdlp import YoutubeSearch, cookies, stream, telegram, youtube, download_t
 __all__ = [
     "AUTOBC_STATUS",
     "AutoBC",
-    "ROAST_MESSAGES",
-    "FITNAH_MESSAGES",
     "jodoh_data",
     "AFK_",
     "AUTOFW_STATUS",
