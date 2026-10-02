@@ -61,7 +61,6 @@ from .gen_img_command import (brat_cmd,
                               maker_img_cmd, quote_cmd)
 from .global_command import (gban_cmd, gbanlist_cmd, gmute_cmd, gmutelist_cmd,
                              ungban_cmd, ungmute_cmd)
-from .graph_command import tg_cmd
 from .gruplog_command import (ADD_ME, DELETED_MESSAGES, EDITED, LOGS_GROUP,
                               ON_RAW_UPDATE, REP_BLOCK, REPLY, logs_cmd)
 from .help_command import general_plugins
@@ -126,14 +125,9 @@ from .usermod_command import (absen_cmd, adminlist_cmd, block_cmd, blocked_cmd,
 from .vctools_command import (cos_cmd, joinvc_cmd, leavevc_cmd, cekos_cmd,
                               startvc_cmd, stopvc_cmd, cleaveos_cmd,
                               vctitle_cmd)
-from .zodiac_command import zodiak_cmd, khodam_cmd, horoskop_cmd, cekjodoh_cmd
 
 
 __all__ = [
-    "cekjodoh_cmd",
-    "zodiak_cmd", 
-    "horoskop_cmd",
-    "khodam_cmd", 
     "naas_cmd", 
     "artimimpi_cmd", 
     "rezeki_cmd", 
@@ -327,7 +321,6 @@ __all__ = [
     "gmutelist_cmd",
     "ungban_cmd",
     "ungmute_cmd",
-    "tg_cmd",
     "ADD_ME",
     "EDITED",
     "LOGS_GROUP",
